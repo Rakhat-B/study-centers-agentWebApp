@@ -1,0 +1,126 @@
+"use client";
+
+import { CreditCard } from "lucide-react";
+import { mockTransactions, formatKZT, Transaction } from "@/data/mock";
+
+function KaspiStatusBadge({ status }: { status: Transaction["kaspiStatus"] }) {
+  const config = {
+    paid: {
+      label: "Kaspi ✓",
+      bg: "rgba(52, 199, 89, 0.1)",
+      color: "rgb(52, 199, 89)",
+      border: "rgba(52, 199, 89, 0.2)",
+    },
+    pending: {
+      label: "Pending",
+      bg: "rgba(255, 159, 10, 0.1)",
+      color: "rgb(255, 159, 10)",
+      border: "rgba(255, 159, 10, 0.2)",
+    },
+    failed: {
+      label: "Failed",
+      bg: "rgba(255, 59, 48, 0.08)",
+      color: "rgb(255, 59, 48)",
+      border: "rgba(255, 59, 48, 0.2)",
+    },
+  };
+
+  const { label, bg, color, border } = config[status];
+
+  return (
+    <span
+      className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+      style={{ background: bg, color, border: `1px solid ${border}` }}
+    >
+      {label}
+    </span>
+  );
+}
+
+export default function RecentPayments() {
+  return (
+    <div className="glass-card p-5 flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2
+            className="text-[15px] font-semibold tracking-tight"
+            style={{ color: "var(--foreground)" }}
+          >
+            Recent Payments
+          </h2>
+          <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
+            via Kaspi.kz
+          </p>
+        </div>
+        <CreditCard size={16} style={{ color: "rgba(29,29,31,0.3)" }} />
+      </div>
+
+      {/* Transactions list */}
+      <div className="flex flex-col gap-2">
+        {mockTransactions.map((tx) => (
+          <div
+            key={tx.id}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+            style={{
+              background: "rgba(255,255,255,0.5)",
+              border: "1px solid rgba(255,255,255,0.6)",
+            }}
+          >
+            {/* Icon */}
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{
+                background:
+                  tx.kaspiStatus === "paid"
+                    ? "rgba(52,199,89,0.1)"
+                    : tx.kaspiStatus === "pending"
+                    ? "rgba(255,159,10,0.1)"
+                    : "rgba(255,59,48,0.08)",
+              }}
+            >
+              <CreditCard
+                size={14}
+                style={{
+                  color:
+                    tx.kaspiStatus === "paid"
+                      ? "rgb(52,199,89)"
+                      : tx.kaspiStatus === "pending"
+                      ? "rgb(255,159,10)"
+                      : "rgb(255,59,48)",
+                }}
+              />
+            </div>
+
+            {/* Name & course */}
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-[13px] font-medium truncate"
+                style={{ color: "var(--foreground)", letterSpacing: "-0.01em" }}
+              >
+                {tx.studentName}
+              </p>
+              <p
+                className="text-[11px] truncate mt-0.5"
+                style={{ color: "rgba(29,29,31,0.45)" }}
+              >
+                {tx.course}
+              </p>
+            </div>
+
+            {/* Amount & status */}
+            <div className="flex-shrink-0 text-right flex flex-col items-end gap-1">
+              <p
+                className="text-[13px] font-semibold tabular-nums"
+                style={{ color: "var(--foreground)" }}
+              >
+                {formatKZT(tx.amount)}
+              </p>
+              <KaspiStatusBadge status={tx.kaspiStatus} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
