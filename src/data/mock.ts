@@ -33,6 +33,30 @@ export interface Transaction {
   kaspiStatus: "paid" | "pending" | "failed";
 }
 
+export interface PayrollPreview {
+  id: string;
+  teacher: string;
+  hours: number;
+  groupCount: number;
+  amount: number;
+}
+
+export interface CenterInsight {
+  id: string;
+  label: string;
+  value: string;
+  trend: string;
+  trendType: "up" | "down" | "stable";
+}
+
+export interface PaymentAlert {
+  id: string;
+  studentName: string;
+  course: string;
+  dueInHours: number;
+  amount: number;
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 const rawClasses: Omit<ClassSession, "time">[] = [
@@ -172,6 +196,85 @@ export const mockTransactions: Transaction[] = [
     course: "IELTS Preparation",
     date: "2026-03-18T09:00:00Z",
     kaspiStatus: "paid",
+  },
+];
+
+export const mockPayrollUpcoming: PayrollPreview[] = [
+  {
+    id: "p1",
+    teacher: "Aizat Bekova",
+    hours: 18,
+    groupCount: 3,
+    amount: 162000,
+  },
+  {
+    id: "p2",
+    teacher: "Yerlan Seitkali",
+    hours: 14,
+    groupCount: 2,
+    amount: 119000,
+  },
+  {
+    id: "p3",
+    teacher: "Ainur Dosanova",
+    hours: 16,
+    groupCount: 3,
+    amount: 138000,
+  },
+];
+
+export const mockCenterInsights: CenterInsight[] = [
+  {
+    id: "i1",
+    label: "Daily Attendance",
+    value: "92%",
+    trend: "+2%",
+    trendType: "up",
+  },
+  {
+    id: "i2",
+    label: "Revenue This Week",
+    value: "450 000 KZT",
+    trend: "+4.8%",
+    trendType: "up",
+  },
+  {
+    id: "i3",
+    label: "Student Count",
+    value: "142",
+    trend: "Stable",
+    trendType: "stable",
+  },
+  {
+    id: "i4",
+    label: "Course Fill Rate",
+    value: "87%",
+    trend: "-1%",
+    trendType: "down",
+  },
+];
+
+export const mockPaymentAlerts: PaymentAlert[] = [
+  {
+    id: "a1",
+    studentName: "Madiyar Sarsembay",
+    course: "IELTS Preparation",
+    dueInHours: 20,
+    amount: 35000,
+  },
+  {
+    id: "a2",
+    studentName: "Aruzhan Kairat",
+    course: "Physics (ENT Track)",
+    dueInHours: 34,
+    amount: 42000,
+  },
+  {
+    id: "a3",
+    studentName: "Adilet Mukanov",
+    course: "Mathematics (Grade 9)",
+    dueInHours: 45,
+    amount: 28000,
   },
 ];
 

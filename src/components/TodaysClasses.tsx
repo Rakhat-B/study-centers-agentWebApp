@@ -2,6 +2,8 @@
 
 import { Clock, Users } from "lucide-react";
 import { getClasses, formatTime, isLive } from "@/data/mock";
+import { t } from "@/lib/i18n";
+import WidgetTitleLink from "@/components/WidgetTitleLink";
 
 export default function TodaysClasses() {
   const classes = getClasses();
@@ -11,14 +13,9 @@ export default function TodaysClasses() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2
-            className="text-[15px] font-semibold tracking-tight"
-            style={{ color: "var(--foreground)" }}
-          >
-            Today&apos;s Classes
-          </h2>
+          <WidgetTitleLink href="#classes" title={t("classes.today", "Today's Classes")} />
           <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
-            {classes.length} sessions scheduled
+            {classes.length} {t("classes.sessionsScheduled", "sessions scheduled")}
           </p>
         </div>
         <Clock size={16} style={{ color: "rgba(29,29,31,0.3)" }} />
@@ -37,10 +34,10 @@ export default function TodaysClasses() {
               style={{
                 background: live
                   ? "rgba(52, 199, 89, 0.07)"
-                  : "rgba(255,255,255,0.5)",
+                  : "rgba(255,255,255,0.2)",
                 border: live
                   ? "1px solid rgba(52, 199, 89, 0.25)"
-                  : "1px solid rgba(255,255,255,0.6)",
+                  : "1px solid rgba(255,255,255,0.3)",
               }}
             >
               {/* Live badge */}
@@ -54,7 +51,7 @@ export default function TodaysClasses() {
                       border: "1px solid rgba(52, 199, 89, 0.3)",
                     }}
                   >
-                    Live
+                    {t("classes.live", "Live")}
                   </span>
                 ) : (
                   <div

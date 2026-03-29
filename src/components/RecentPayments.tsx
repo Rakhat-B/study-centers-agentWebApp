@@ -2,23 +2,25 @@
 
 import { CreditCard } from "lucide-react";
 import { mockTransactions, formatKZT, Transaction } from "@/data/mock";
+import { t } from "@/lib/i18n";
+import WidgetTitleLink from "@/components/WidgetTitleLink";
 
 function KaspiStatusBadge({ status }: { status: Transaction["kaspiStatus"] }) {
   const config = {
     paid: {
-      label: "Kaspi ✓",
+      label: t("payments.status.paid", "Kaspi ✓"),
       bg: "rgba(52, 199, 89, 0.1)",
       color: "rgb(52, 199, 89)",
       border: "rgba(52, 199, 89, 0.2)",
     },
     pending: {
-      label: "Pending",
+      label: t("payments.status.pending", "Pending"),
       bg: "rgba(255, 159, 10, 0.1)",
       color: "rgb(255, 159, 10)",
       border: "rgba(255, 159, 10, 0.2)",
     },
     failed: {
-      label: "Failed",
+      label: t("payments.status.failed", "Failed"),
       bg: "rgba(255, 59, 48, 0.08)",
       color: "rgb(255, 59, 48)",
       border: "rgba(255, 59, 48, 0.2)",
@@ -43,14 +45,9 @@ export default function RecentPayments() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2
-            className="text-[15px] font-semibold tracking-tight"
-            style={{ color: "var(--foreground)" }}
-          >
-            Recent Payments
-          </h2>
+          <WidgetTitleLink href="#payments" title={t("payments.title", "Recent Payments")} />
           <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
-            via Kaspi.kz
+            {t("payments.subtitle", "via Kaspi.kz")}
           </p>
         </div>
         <CreditCard size={16} style={{ color: "rgba(29,29,31,0.3)" }} />
@@ -63,8 +60,8 @@ export default function RecentPayments() {
             key={tx.id}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
             style={{
-              background: "rgba(255,255,255,0.5)",
-              border: "1px solid rgba(255,255,255,0.6)",
+              background: "rgba(255,255,255,0.2)",
+              border: "1px solid rgba(255,255,255,0.3)",
             }}
           >
             {/* Icon */}

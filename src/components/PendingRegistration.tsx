@@ -1,8 +1,10 @@
 "use client";
 
-import { UserPlus, Phone, BookOpen } from "lucide-react";
+import { UserPlus, Phone, BookOpen, Pencil } from "lucide-react";
 import { mockStudentLeads } from "@/data/mock";
 import { useState } from "react";
+import { t } from "@/lib/i18n";
+import WidgetTitleLink from "@/components/WidgetTitleLink";
 
 export default function PendingRegistration() {
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -16,14 +18,9 @@ export default function PendingRegistration() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2
-            className="text-[15px] font-semibold tracking-tight"
-            style={{ color: "var(--foreground)" }}
-          >
-            Pending Registration
-          </h2>
+          <WidgetTitleLink href="#students" title={t("pending.title", "Pending Registration")} />
           <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
-            {mockStudentLeads.length} new leads today
+            {mockStudentLeads.length} {t("pending.newLeads", "new leads today")}
           </p>
         </div>
         <div
@@ -46,8 +43,8 @@ export default function PendingRegistration() {
               key={student.id}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
               style={{
-                background: "rgba(255,255,255,0.5)",
-                border: "1px solid rgba(255,255,255,0.6)",
+                background: "rgba(255,255,255,0.2)",
+                border: "1px solid rgba(255,255,255,0.3)",
                 opacity: isAdded ? 0.5 : 1,
                 transition: "opacity 0.2s",
               }}
@@ -90,25 +87,40 @@ export default function PendingRegistration() {
                 </div>
               </div>
 
-              {/* Quick Add button */}
-              <button
-                onClick={() => handleQuickAdd(student.id)}
-                disabled={isAdded}
-                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-150"
-                style={{
-                  background: isAdded
-                    ? "rgba(52, 199, 89, 0.12)"
-                    : "rgba(0, 113, 227, 0.1)",
-                  color: isAdded ? "rgb(52, 199, 89)" : "var(--accent)",
-                  border: isAdded
-                    ? "1px solid rgba(52,199,89,0.2)"
-                    : "1px solid rgba(0,113,227,0.2)",
-                  cursor: isAdded ? "default" : "pointer",
-                }}
-              >
-                <UserPlus size={11} />
-                {isAdded ? "Added" : "Quick Add"}
-              </button>
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <button
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{
+                    background: "rgba(255,255,255,0.45)",
+                    border: "1px solid rgba(255,255,255,0.7)",
+                    color: "rgba(29,29,31,0.65)",
+                    cursor: "pointer",
+                  }}
+                  aria-label={t("pending.edit", "Edit lead")}
+                >
+                  <Pencil size={13} />
+                </button>
+
+                <button
+                  onClick={() => handleQuickAdd(student.id)}
+                  disabled={isAdded}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-all duration-150"
+                  style={{
+                    background: isAdded
+                      ? "rgba(52, 199, 89, 0.12)"
+                      : "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
+                    color: isAdded ? "rgb(52, 199, 89)" : "white",
+                    border: isAdded
+                      ? "1px solid rgba(52,199,89,0.2)"
+                      : "1px solid rgba(8, 124, 242, 0.45)",
+                    boxShadow: isAdded ? "none" : "0 8px 18px rgba(0, 109, 224, 0.32)",
+                    cursor: isAdded ? "default" : "pointer",
+                  }}
+                >
+                  <UserPlus size={11} />
+                  {isAdded ? t("pending.added", "Added") : t("pending.quickAdd", "Quick Add")}
+                </button>
+              </div>
             </div>
           );
         })}
