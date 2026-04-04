@@ -1,10 +1,22 @@
 "use client";
 
-import { UserPlus, Phone, BookOpen, Pencil } from "lucide-react";
-import { mockStudentLeads } from "@/data/mock";
+import { UserPlus, Phone, BookOpen, MessageCircle } from "lucide-react";
+import { mockStudentLeads, type Student } from "@/data/mock";
 import { useState } from "react";
 import { t } from "@/lib/i18n";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
+import PipelineStatusBadge from "@/components/PipelineStatusBadge";
+
+function pipelineHint(status: Student["pipelineStatus"]) {
+  switch (status) {
+    case "lead":
+      return "Asked Questions";
+    case "evaluating":
+      return "Testing/Selecting Course";
+    case "active":
+      return "Registered";
+  }
+}
 
 export default function PendingRegistration() {
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -66,12 +78,20 @@ export default function PendingRegistration() {
 
               {/* Info */}
               <div className="flex-1 min-w-0">
-                <p
-                  className="text-[13px] font-medium truncate"
-                  style={{ color: "var(--foreground)", letterSpacing: "-0.01em" }}
-                >
-                  {student.name}
-                </p>
+                <div className="flex items-center gap-2 min-w-0">
+                  <p
+                    className="text-[13px] font-medium truncate"
+                    style={{ color: "var(--foreground)", letterSpacing: "-0.01em" }}
+                  >
+                    {student.name}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <PipelineStatusBadge status={student.pipelineStatus} />
+                    <span className="text-[10px]" style={{ color: "rgba(29,29,31,0.45)" }}>
+                      {pipelineHint(student.pipelineStatus)}
+                    </span>
+                  </div>
+                </div>
                 <div
                   className="flex items-center gap-2 mt-0.5"
                   style={{ color: "rgba(29,29,31,0.45)" }}
@@ -89,16 +109,17 @@ export default function PendingRegistration() {
 
               <div className="flex-shrink-0 flex items-center gap-2">
                 <button
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  className="flex items-center gap-1.5 px-2.5 h-8 rounded-full"
                   style={{
-                    background: "rgba(255,255,255,0.45)",
-                    border: "1px solid rgba(255,255,255,0.7)",
-                    color: "rgba(29,29,31,0.65)",
+                    background: "rgba(34, 197, 94, 0.16)",
+                    border: "1px solid rgba(34, 197, 94, 0.35)",
+                    color: "rgb(21, 128, 61)",
                     cursor: "pointer",
                   }}
-                  aria-label={t("pending.edit", "Edit lead")}
+                  aria-label={t("pending.whatsapp", "Notify via WhatsApp")}
                 >
-                  <Pencil size={13} />
+                  <MessageCircle size={13} />
+                  <span className="text-[11px] font-semibold">WhatsApp</span>
                 </button>
 
                 <button

@@ -6,8 +6,25 @@ export interface Student {
   name: string;
   phone: string;
   course: string;
-  status: "lead" | "active" | "inactive";
+  pipelineStatus: "lead" | "evaluating" | "active";
   registeredAt: string;
+}
+
+export interface ClassGroup {
+  id: string;
+  name: string;
+  instructor: string;
+  participants: number;
+  maxParticipants: number;
+  scheduleSummary: string;
+}
+
+export interface InstructorProfile {
+  id: string;
+  name: string;
+  specialization: string;
+  scheduleSummary: string;
+  payrollRateKztPerHour: number;
 }
 
 export interface ClassSession {
@@ -127,7 +144,7 @@ export const mockStudentLeads: Student[] = [
     name: "Daulet Nurmagambetov",
     phone: "+7 701 234 5678",
     course: "IELTS Preparation",
-    status: "lead",
+    pipelineStatus: "lead",
     registeredAt: "2026-03-20T08:15:00Z",
   },
   {
@@ -135,7 +152,7 @@ export const mockStudentLeads: Student[] = [
     name: "Zhansaya Beisenova",
     phone: "+7 777 987 6543",
     course: "Mathematics (Grade 9)",
-    status: "lead",
+    pipelineStatus: "evaluating",
     registeredAt: "2026-03-20T09:30:00Z",
   },
   {
@@ -143,7 +160,7 @@ export const mockStudentLeads: Student[] = [
     name: "Amir Serikbaev",
     phone: "+7 747 456 7890",
     course: "Physics (ENT Track)",
-    status: "lead",
+    pipelineStatus: "active",
     registeredAt: "2026-03-20T10:00:00Z",
   },
   {
@@ -151,8 +168,95 @@ export const mockStudentLeads: Student[] = [
     name: "Kamila Rakhimova",
     phone: "+7 705 321 0987",
     course: "Kazakh Literature",
-    status: "lead",
+    pipelineStatus: "lead",
     registeredAt: "2026-03-20T11:45:00Z",
+  },
+];
+
+export const mockStudentsDirectory: Student[] = [
+  ...mockStudentLeads,
+  {
+    id: "s5",
+    name: "Aruzhan Kairat",
+    phone: "+7 702 111 2233",
+    course: "English Conversation",
+    pipelineStatus: "evaluating",
+    registeredAt: "2026-03-18T12:20:00Z",
+  },
+  {
+    id: "s6",
+    name: "Nurzhan Kasymov",
+    phone: "+7 775 333 4455",
+    course: "IELTS Preparation",
+    pipelineStatus: "active",
+    registeredAt: "2026-02-25T08:00:00Z",
+  },
+  {
+    id: "s7",
+    name: "Saltanat Yessimova",
+    phone: "+7 707 888 9900",
+    course: "Mathematics (Grade 9)",
+    pipelineStatus: "lead",
+    registeredAt: "2026-03-29T15:10:00Z",
+  },
+];
+
+export const mockClassGroups: ClassGroup[] = [
+  {
+    id: "g1",
+    name: "IELTS Advanced-A",
+    instructor: "Aizat Bekova",
+    participants: 12,
+    maxParticipants: 15,
+    scheduleSummary: "Mon/Wed/Fri • 18:30",
+  },
+  {
+    id: "g2",
+    name: "Math Grade 9-B",
+    instructor: "Yerlan Seitkali",
+    participants: 8,
+    maxParticipants: 10,
+    scheduleSummary: "Tue/Thu • 17:00",
+  },
+  {
+    id: "g3",
+    name: "ENT Physics-C",
+    instructor: "Bakyt Omarov",
+    participants: 14,
+    maxParticipants: 15,
+    scheduleSummary: "Sat • 11:00",
+  },
+  {
+    id: "g4",
+    name: "English Conversation-D",
+    instructor: "Madina Akhmetova",
+    participants: 6,
+    maxParticipants: 8,
+    scheduleSummary: "Mon/Thu • 19:30",
+  },
+];
+
+export const mockInstructors: InstructorProfile[] = [
+  {
+    id: "i1",
+    name: "Aizat Bekova",
+    specialization: "IELTS / Academic English",
+    scheduleSummary: "3 groups • evenings",
+    payrollRateKztPerHour: 9000,
+  },
+  {
+    id: "i2",
+    name: "Yerlan Seitkali",
+    specialization: "Mathematics (Grades 7–11)",
+    scheduleSummary: "2 groups • Tue/Thu",
+    payrollRateKztPerHour: 8500,
+  },
+  {
+    id: "i3",
+    name: "Bakyt Omarov",
+    specialization: "Physics (ENT Track)",
+    scheduleSummary: "1 group • weekend",
+    payrollRateKztPerHour: 9500,
   },
 ];
 

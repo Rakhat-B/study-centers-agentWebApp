@@ -15,9 +15,13 @@ import {
   LineChart,
   Calendar,
   LifeBuoy,
+  ClipboardList,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { t } from "@/lib/i18n";
+import { useDashboard } from "@/context/DashboardContext";
 
 type NavItem = {
   id: string;
@@ -35,8 +39,8 @@ type AccordionGroup = {
 };
 
 const rootNav: NavItem[] = [
-  { id: "dashboard", labelKey: "sidebar.dashboard", defaultLabel: "Dashboard", icon: BarChart2, href: "#dashboard" },
-  { id: "timetable", labelKey: "sidebar.timetable", defaultLabel: "Timetable", icon: Calendar, href: "#timetable" },
+  { id: "dashboard", labelKey: "sidebar.dashboard", defaultLabel: "Dashboard", icon: BarChart2, href: "/" },
+  { id: "timetable", labelKey: "sidebar.timetable", defaultLabel: "Timetable", icon: Calendar, href: "/timetable" },
 ];
 
 const accordionGroups: AccordionGroup[] = [
@@ -45,9 +49,9 @@ const accordionGroups: AccordionGroup[] = [
     labelKey: "sidebar.manage",
     defaultLabel: "Manage",
     items: [
-      { id: "students", labelKey: "sidebar.students", defaultLabel: "Students", icon: Users, href: "#students" },
-      { id: "classes", labelKey: "sidebar.classes", defaultLabel: "Classes", icon: BookOpen, href: "#classes" },
-      { id: "instructors", labelKey: "sidebar.instructors", defaultLabel: "Instructors", icon: UserSquare2, href: "#instructors" },
+      { id: "students", labelKey: "sidebar.students", defaultLabel: "Students", icon: Users, href: "/manage/students" },
+      { id: "classes", labelKey: "sidebar.classes", defaultLabel: "Classes", icon: BookOpen, href: "/manage/classes" },
+      { id: "instructors", labelKey: "sidebar.instructors", defaultLabel: "Instructors", icon: UserSquare2, href: "/manage/instructors" },
     ],
   },
   {
@@ -55,15 +59,22 @@ const accordionGroups: AccordionGroup[] = [
     labelKey: "sidebar.financeInsight",
     defaultLabel: "Finance & Insight",
     items: [
-      { id: "payments", labelKey: "sidebar.payments", defaultLabel: "Payments", icon: CreditCard, href: "#payments" },
-      { id: "payroll", labelKey: "sidebar.payroll", defaultLabel: "Payroll", icon: WalletCards, href: "#payroll" },
-      { id: "reports", labelKey: "sidebar.reports", defaultLabel: "Reports", icon: LineChart, href: "#reports" },
+      {
+        id: "bankfeed",
+        labelKey: "sidebar.bankFeedPayments",
+        defaultLabel: "Bank Feed & Payments",
+        icon: CreditCard,
+        href: "/finance/bankfeed",
+      },
+      { id: "payroll", labelKey: "sidebar.payroll", defaultLabel: "Payroll", icon: WalletCards, href: "/finance/payroll" },
+      { id: "reports", labelKey: "sidebar.reports", defaultLabel: "Reports", icon: LineChart, href: "/finance/reports" },
     ],
   },
 ];
 
-export default function Sidebar({ currentView = "dashboard" }: { currentView?: string }) {
-  const [active, setActive] = useState(currentView);
+export default function Sidebar() {
+  const { currentRole, setCurrentRole } = useDashboard();
+  const pathname = usePathname();
   const [openGroups, setOpenGroups] = useState<Record<AccordionGroup["id"], boolean>>({
     manage: true,
     finance: true,
@@ -71,15 +82,49 @@ export default function Sidebar({ currentView = "dashboard" }: { currentView?: s
   const [locale, setLocale] = useState<"KZ" | "RU" | "EN">("EN");
   const [darkIcon, setDarkIcon] = useState(false);
 
-  useEffect(() => {
-    setActive(currentView);
-  }, [currentView]);
-
   const toggleGroup = (groupId: AccordionGroup["id"]) => {
     setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
   };
 
-  const isGroupActive = (group: AccordionGroup) => group.items.some((item) => item.id === active);
+  const visibleAccordionGroups =
+    currentRole === "Receptionist"
+      ? accordionGroups.filter((group) => group.id !== "finance")
+      : currentRole === "Instructor"
+      ? []
+      : accordionGroups;
+
+  const instructorNav: NavItem[] = [
+    {
+      id: "my-schedule",
+      labelKey: "sidebar.mySchedule",
+      defaultLabel: "My Schedule",
+      icon: Calendar,
+      href: "/timetable",
+    },
+    {
+      id: "my-classes",
+      labelKey: "sidebar.myClasses",
+      defaultLabel: "My Classes",
+      icon: BookOpen,
+      href: "/manage/classes",
+    },
+    {
+      id: "students-view-only",
+      labelKey: "sidebar.studentsViewOnly",
+      defaultLabel: "Students (View Only)",
+      icon: ClipboardList,
+      href: "/manage/students",
+    },
+  ];
+
+  const isItemActive = (href: string) => {
+    if (href === "/") {
+      return pathname === "/";
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const isGroupActive = (group: AccordionGroup) => group.items.some((item) => isItemActive(item.href));
 
   const navBaseClass = "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 hover:bg-white/5";
 
@@ -103,13 +148,12 @@ export default function Sidebar({ currentView = "dashboard" }: { currentView?: s
       </div>
 
       <nav className="flex flex-col gap-1.5">
-        {rootNav.map(({ id, labelKey, defaultLabel, icon: Icon, href }) => {
-          const activeRoot = active === id;
+        {(currentRole === "Instructor" ? [] : rootNav).map(({ id, labelKey, defaultLabel, icon: Icon, href }) => {
+          const activeRoot = isItemActive(href);
           return (
-            <a
+            <Link
               key={id}
               href={href}
-              onClick={() => setActive(id)}
               className={`${navBaseClass} ${activeRoot ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"}`}
               style={{
                 color: activeRoot ? "var(--accent)" : "rgba(29,29,31,0.72)",
@@ -120,11 +164,33 @@ export default function Sidebar({ currentView = "dashboard" }: { currentView?: s
             >
               <Icon size={17} strokeWidth={activeRoot ? 2.2 : 1.9} />
               {t(labelKey, defaultLabel)}
-            </a>
+            </Link>
           );
         })}
 
-        {accordionGroups.map((group) => {
+        {currentRole === "Instructor"
+          ? instructorNav.map(({ id, labelKey, defaultLabel, icon: Icon, href }) => {
+              const itemActive = isItemActive(href);
+              return (
+                <Link
+                  key={id}
+                  href={href}
+                  className={`${navBaseClass} ${itemActive ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"}`}
+                  style={{
+                    color: itemActive ? "var(--accent)" : "rgba(29,29,31,0.72)",
+                    fontSize: "14px",
+                    letterSpacing: "-0.01em",
+                    textDecoration: "none",
+                  }}
+                >
+                  <Icon size={17} strokeWidth={itemActive ? 2.2 : 1.9} />
+                  {t(labelKey, defaultLabel)}
+                </Link>
+              );
+            })
+          : null}
+
+        {visibleAccordionGroups.map((group) => {
           const open = openGroups[group.id];
           const activeGroup = isGroupActive(group);
 
@@ -157,12 +223,11 @@ export default function Sidebar({ currentView = "dashboard" }: { currentView?: s
               >
                 <div className="pt-1 pb-1 px-1 flex flex-col gap-1">
                   {group.items.map(({ id, labelKey, defaultLabel, icon: Icon, href }) => {
-                    const childActive = active === id;
+                    const childActive = isItemActive(href);
                     return (
-                      <a
+                      <Link
                         key={id}
                         href={href}
-                        onClick={() => setActive(id)}
                         className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 ${
                           childActive ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"
                         }`}
@@ -175,7 +240,7 @@ export default function Sidebar({ currentView = "dashboard" }: { currentView?: s
                       >
                         <Icon size={16} strokeWidth={childActive ? 2.1 : 1.85} />
                         {t(labelKey, defaultLabel)}
-                      </a>
+                      </Link>
                     );
                   })}
                 </div>
@@ -186,34 +251,62 @@ export default function Sidebar({ currentView = "dashboard" }: { currentView?: s
       </nav>
 
       <div className="mt-auto pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.45)" }}>
-        <a
-          href="#support"
-          onClick={() => setActive("support")}
-          className={`mx-1 ${navBaseClass} ${active === "support" ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"}`}
+        <Link
+          href="/help"
+          className={`mx-1 ${navBaseClass} ${isItemActive("/help") ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"}`}
           style={{
-            color: active === "support" ? "var(--accent)" : "rgba(29,29,31,0.72)",
+            color: isItemActive("/help") ? "var(--accent)" : "rgba(29,29,31,0.72)",
             fontSize: "14px",
             letterSpacing: "-0.01em",
             textDecoration: "none",
           }}
         >
-          <LifeBuoy size={17} strokeWidth={active === "support" ? 2.2 : 1.9} />
+          <LifeBuoy size={17} strokeWidth={isItemActive("/help") ? 2.2 : 1.9} />
           {t("sidebar.helpSupport", "Help & Support")}
-        </a>
-        <a
-          href="#settings"
-          onClick={() => setActive("settings")}
-          className={`mx-1 mt-1.5 ${navBaseClass} ${active === "settings" ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"}`}
+        </Link>
+        <Link
+          href="/settings"
+          className={`mx-1 mt-1.5 ${navBaseClass} ${isItemActive("/settings") ? "bg-white/40 shadow-md shadow-black/5 backdrop-blur-md font-semibold" : "font-medium"}`}
           style={{
-            color: active === "settings" ? "var(--accent)" : "rgba(29,29,31,0.72)",
+            color: isItemActive("/settings") ? "var(--accent)" : "rgba(29,29,31,0.72)",
             fontSize: "14px",
             letterSpacing: "-0.01em",
             textDecoration: "none",
           }}
         >
-          <Settings size={17} strokeWidth={active === "settings" ? 2.2 : 1.9} />
+          <Settings size={17} strokeWidth={isItemActive("/settings") ? 2.2 : 1.9} />
           {t("sidebar.settings", "Settings")}
-        </a>
+        </Link>
+
+        <div
+          className="mx-1 mt-2.5 rounded-xl px-2.5 py-2"
+          style={{
+            border: "1px solid rgba(255,255,255,0.42)",
+            background: "rgba(255,255,255,0.2)",
+          }}
+        >
+          <p className="text-[11px] font-medium mb-1.5" style={{ color: "rgba(29,29,31,0.55)" }}>
+            {t("sidebar.viewAs", "View as")}
+          </p>
+          <div className="flex items-center gap-1 rounded-full p-1" style={{ background: "rgba(255,255,255,0.3)" }}>
+            {(["Director", "Receptionist", "Instructor"] as const).map((role) => (
+              <button
+                key={role}
+                onClick={() => setCurrentRole(role)}
+                className="flex-1 text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors"
+                style={{
+                  background: currentRole === role ? "rgba(0, 113, 227, 0.14)" : "transparent",
+                  color: currentRole === role ? "var(--accent)" : "rgba(29,29,31,0.65)",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+                aria-label={t("sidebar.viewAs", "View as")}
+              >
+                {role}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="px-3 mt-2">

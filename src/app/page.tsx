@@ -10,10 +10,13 @@ import AddStudentButton from "@/components/AddStudentButton";
 import DateDisplay from "@/components/DateDisplay";
 import CenterIntelligence from "@/components/CenterIntelligence";
 import PaymentAlerts from "@/components/PaymentAlerts";
+import InstructorSchedule from "@/components/InstructorSchedule";
+import QuickAttendance from "@/components/QuickAttendance";
 import { t } from "@/lib/i18n";
 import {
   DashboardProvider,
   DashboardWidgetId,
+  UserRole,
   useDashboard,
 } from "@/context/DashboardContext";
 
@@ -25,17 +28,20 @@ type TileConfig = {
 };
 
 function DashboardContent() {
-  const { editMode, toggleEditMode, visibleWidgets, toggleWidgetVisibility } = useDashboard();
+  const { editMode, toggleEditMode, visibleWidgets, toggleWidgetVisibility, currentRole } = useDashboard();
 
-  const [tileOrder, setTileOrder] = useState<DashboardWidgetId[]>([
-    "classes",
-    "registration",
-    "intelligence",
-    "payments",
-    "alerts",
-  ]);
+  const defaultTileOrderByRole: Record<UserRole, DashboardWidgetId[]> = {
+    Director: ["registration", "intelligence", "classes", "payments", "alerts"],
+    Receptionist: ["registration", "classes", "alerts"],
+    Instructor: ["instructorSchedule", "quickAttendance"],
+  };
+
+  const [tileOrderByRole, setTileOrderByRole] = useState<Record<UserRole, DashboardWidgetId[]>>(defaultTileOrderByRole);
   const [draggingTileId, setDraggingTileId] = useState<DashboardWidgetId | null>(null);
   const [dropTargetId, setDropTargetId] = useState<DashboardWidgetId | null>(null);
+
+  const roleVisibleTileIds = defaultTileOrderByRole[currentRole];
+  const tileOrder = tileOrderByRole[currentRole];
 
   const tiles: TileConfig[] = useMemo(
     () => [
@@ -59,9 +65,21 @@ function DashboardContent() {
       },
       {
         id: "payments",
-        title: t("payments.title", "Recent Payments"),
+        title: t("payments.title", "Bank Feed & Payments"),
         href: "#payments",
         render: () => <RecentPayments />,
+      },
+      {
+        id: "instructorSchedule",
+        title: t("instructor.schedule", "Instructor Schedule"),
+        href: "#my-schedule",
+        render: () => <InstructorSchedule />,
+      },
+      {
+        id: "quickAttendance",
+        title: t("instructor.quickAttendance", "Quick Attendance"),
+        href: "#my-classes",
+        render: () => <QuickAttendance />,
       },
       {
         id: "alerts",
@@ -80,24 +98,30 @@ function DashboardContent() {
     }, {} as Record<DashboardWidgetId, TileConfig>);
   }, [tiles]);
 
-  const orderedTiles = tileOrder.map((tileId) => tilesById[tileId]);
+  const orderedTiles = tileOrder
+    .filter((tileId) => roleVisibleTileIds.includes(tileId))
+    .map((tileId) => tilesById[tileId]);
 
   const moveTile = (sourceId: DashboardWidgetId, targetId: DashboardWidgetId) => {
     if (sourceId === targetId) {
       return;
     }
 
-    setTileOrder((prev) => {
+    setTileOrderByRole((prevByRole) => {
+      const prev = prevByRole[currentRole];
       const sourceIndex = prev.indexOf(sourceId);
       const targetIndex = prev.indexOf(targetId);
       if (sourceIndex === -1 || targetIndex === -1) {
-        return prev;
+        return prevByRole;
       }
 
       const next = [...prev];
       const [moved] = next.splice(sourceIndex, 1);
       next.splice(targetIndex, 0, moved);
-      return next;
+      return {
+        ...prevByRole,
+        [currentRole]: next,
+      };
     });
   };
 
@@ -118,25 +142,27 @@ function DashboardContent() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={toggleEditMode}
-              className="flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[13px] font-semibold transition-all duration-200"
-              style={{
-                background: editMode
-                  ? "rgba(0, 113, 227, 0.16)"
-                  : "rgba(255,255,255,0.3)",
-                color: editMode ? "var(--accent)" : "rgba(29,29,31,0.78)",
-                border: "1px solid rgba(255,255,255,0.42)",
-                boxShadow: editMode ? "0 8px 22px rgba(0,113,227,0.2)" : "none",
-                cursor: "pointer",
-              }}
-            >
-              <LayoutDashboard size={15} />
-              {editMode
-                ? t("dashboard.doneCustomizing", "Done")
-                : t("dashboard.customize", "Customize Layout")}
-            </button>
-            <AddStudentButton />
+            {currentRole !== "Instructor" ? (
+              <button
+                onClick={toggleEditMode}
+                className="flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[13px] font-semibold transition-all duration-200"
+                style={{
+                  background: editMode
+                    ? "rgba(0, 113, 227, 0.16)"
+                    : "rgba(255,255,255,0.3)",
+                  color: editMode ? "var(--accent)" : "rgba(29,29,31,0.78)",
+                  border: "1px solid rgba(255,255,255,0.42)",
+                  boxShadow: editMode ? "0 8px 22px rgba(0,113,227,0.2)" : "none",
+                  cursor: "pointer",
+                }}
+              >
+                <LayoutDashboard size={15} />
+                {editMode
+                  ? t("dashboard.doneCustomizing", "Done")
+                  : t("dashboard.customize", "Customize Layout")}
+              </button>
+            ) : null}
+            {currentRole === "Director" || currentRole === "Receptionist" ? <AddStudentButton /> : null}
           </div>
         </div>
 

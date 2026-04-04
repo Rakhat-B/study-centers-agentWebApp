@@ -7,14 +7,20 @@ export type DashboardWidgetId =
   | "registration"
   | "intelligence"
   | "payments"
-  | "alerts";
+  | "alerts"
+  | "instructorSchedule"
+  | "quickAttendance";
+
+export type UserRole = "Director" | "Receptionist" | "Instructor";
 
 type VisibilityMap = Record<DashboardWidgetId, boolean>;
 
 type DashboardContextType = {
   editMode: boolean;
   visibleWidgets: VisibilityMap;
+  currentRole: UserRole;
   toggleEditMode: () => void;
+  setCurrentRole: (role: UserRole) => void;
   setWidgetVisibility: (widgetId: DashboardWidgetId, visible: boolean) => void;
   toggleWidgetVisibility: (widgetId: DashboardWidgetId) => void;
 };
@@ -27,17 +33,22 @@ const initialVisibility: VisibilityMap = {
   intelligence: true,
   payments: true,
   alerts: true,
+  instructorSchedule: true,
+  quickAttendance: true,
 };
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [editMode, setEditMode] = useState(false);
   const [visibleWidgets, setVisibleWidgets] = useState<VisibilityMap>(initialVisibility);
+  const [currentRole, setCurrentRole] = useState<UserRole>("Director");
 
   const value = useMemo(
     () => ({
       editMode,
       visibleWidgets,
+      currentRole,
       toggleEditMode: () => setEditMode((prev) => !prev),
+      setCurrentRole,
       setWidgetVisibility: (widgetId: DashboardWidgetId, visible: boolean) => {
         setVisibleWidgets((prev) => ({ ...prev, [widgetId]: visible }));
       },
@@ -45,7 +56,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         setVisibleWidgets((prev) => ({ ...prev, [widgetId]: !prev[widgetId] }));
       },
     }),
-    [editMode, visibleWidgets]
+    [editMode, visibleWidgets, currentRole]
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;
