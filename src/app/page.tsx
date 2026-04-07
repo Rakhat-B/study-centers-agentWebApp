@@ -229,7 +229,7 @@ function DashboardContent() {
                         onClick={() => toggleWidgetVisibility(tile.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold"
                         style={{
-                          background: "rgba(255,255,255,0.35)",
+                          background: "hsla(0, 0%, 100%, 0.35)",
                           color: "rgba(29,29,31,0.8)",
                           border: "1px solid rgba(255,255,255,0.48)",
                           cursor: "pointer",
