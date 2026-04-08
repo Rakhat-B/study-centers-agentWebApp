@@ -127,7 +127,7 @@ function DashboardContent() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar currentView="dashboard" />
+      <Sidebar />
 
       <main className="mesh-bg flex-1 min-h-screen overflow-y-auto px-5 md:px-8 py-6 md:py-8">
         <div className="flex items-start justify-between gap-4 mb-8">
