@@ -80,23 +80,280 @@ export interface PaymentAlert {
   amount: number;
 }
 
+export type RoomItem = {
+  id: string;
+  name: string;
+};
+
+export type InstructorCatalogItem = {
+  id: string;
+  name: string;
+  subject: string;
+};
+
+export type GroupSchedule = {
+  days: string[];
+  start: string;
+  end: string;
+};
+
+export type ClassCatalogGroup = {
+  id: string;
+  name: string;
+  capacity: number;
+  roomId: string;
+  instructorId: string;
+  studentIds: string[];
+  schedule: GroupSchedule;
+};
+
+export type ClassCatalogCourse = {
+  id: string;
+  courseName: string;
+  groups: ClassCatalogGroup[];
+};
+
 export type ClassCatalogItem = {
   name: string;
   groups: string[];
 };
 
-export const CLASSES_DATA: ClassCatalogItem[] = [
-  { name: "IELTS Preparation", groups: ["Group A", "Group B", "Evening Group"] },
-  { name: "Mathematics (Grade 9)", groups: ["Group A", "Group B", "Weekend Group"] },
-  { name: "Physics (ENT Track)", groups: ["Group C", "Group D", "Intensive Group"] },
-  { name: "Kazakh Literature", groups: ["Group A", "Group B"] },
-  { name: "English Conversation", groups: ["Group D", "Evening Group", "Speaking Club"] },
+export const ROOMS_DATA: RoomItem[] = [
+  { id: "room-101", name: "Room 101" },
+  { id: "room-102", name: "Room 102" },
+  { id: "room-103", name: "Room 103" },
+  { id: "lab-a", name: "Lab A" },
+  { id: "lab-b", name: "Lab B" },
+];
+
+export const INSTRUCTORS_DATA: InstructorCatalogItem[] = [
+  { id: "inst-aizat", name: "Aizat Bekova", subject: "IELTS / Academic English" },
+  { id: "inst-yerlan", name: "Yerlan Seitkali", subject: "Mathematics" },
+  { id: "inst-bakyt", name: "Bakyt Omarov", subject: "Physics (ENT)" },
+  { id: "inst-ainur", name: "Ainur Dosanova", subject: "Kazakh Literature" },
+  { id: "inst-madina", name: "Madina Akhmetova", subject: "English Conversation" },
+  { id: "inst-alisher", name: "Alisher K.", subject: "Speaking / IELTS" },
+];
+
+export const CLASSES_DATA: ClassCatalogCourse[] = [
+  {
+    id: "course-ielts",
+    courseName: "IELTS Preparation",
+    groups: [
+      {
+        id: "ielts-a",
+        name: "Group A",
+        capacity: 15,
+        roomId: "room-101",
+        instructorId: "inst-aizat",
+        studentIds: ["s6"],
+        schedule: {
+          days: ["Mon", "Wed", "Fri"],
+          start: "15:00",
+          end: "16:30",
+        },
+      },
+      {
+        id: "ielts-b",
+        name: "Group B",
+        capacity: 14,
+        roomId: "room-103",
+        instructorId: "inst-alisher",
+        studentIds: [],
+        schedule: {
+          days: ["Tue", "Thu"],
+          start: "14:00",
+          end: "15:30",
+        },
+      },
+      {
+        id: "ielts-evening",
+        name: "Evening Group",
+        capacity: 18,
+        roomId: "lab-b",
+        instructorId: "inst-madina",
+        studentIds: [],
+        schedule: {
+          days: ["Mon", "Wed", "Fri"],
+          start: "19:00",
+          end: "20:30",
+        },
+      },
+    ],
+  },
+  {
+    id: "course-math9",
+    courseName: "Mathematics (Grade 9)",
+    groups: [
+      {
+        id: "math9-a",
+        name: "Group A",
+        capacity: 12,
+        roomId: "room-102",
+        instructorId: "inst-yerlan",
+        studentIds: [],
+        schedule: {
+          days: ["Mon", "Wed"],
+          start: "16:45",
+          end: "18:15",
+        },
+      },
+      {
+        id: "math9-b",
+        name: "Group B",
+        capacity: 12,
+        roomId: "room-101",
+        instructorId: "inst-yerlan",
+        studentIds: [],
+        schedule: {
+          days: ["Tue", "Thu"],
+          start: "17:00",
+          end: "18:30",
+        },
+      },
+      {
+        id: "math9-weekend",
+        name: "Weekend Group",
+        capacity: 15,
+        roomId: "lab-a",
+        instructorId: "inst-ainur",
+        studentIds: [],
+        schedule: {
+          days: ["Sat", "Sun"],
+          start: "10:00",
+          end: "11:30",
+        },
+      },
+    ],
+  },
+  {
+    id: "course-physics",
+    courseName: "Physics (ENT Track)",
+    groups: [
+      {
+        id: "physics-c",
+        name: "Group C",
+        capacity: 15,
+        roomId: "lab-a",
+        instructorId: "inst-bakyt",
+        studentIds: ["s3"],
+        schedule: {
+          days: ["Mon", "Wed", "Fri"],
+          start: "13:00",
+          end: "14:30",
+        },
+      },
+      {
+        id: "physics-d",
+        name: "Group D",
+        capacity: 15,
+        roomId: "lab-a",
+        instructorId: "inst-bakyt",
+        studentIds: [],
+        schedule: {
+          days: ["Tue", "Thu"],
+          start: "12:30",
+          end: "14:00",
+        },
+      },
+      {
+        id: "physics-intensive",
+        name: "Intensive Group",
+        capacity: 10,
+        roomId: "lab-b",
+        instructorId: "inst-ainur",
+        studentIds: [],
+        schedule: {
+          days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+          start: "09:00",
+          end: "10:30",
+        },
+      },
+    ],
+  },
+  {
+    id: "course-kazlit",
+    courseName: "Kazakh Literature",
+    groups: [
+      {
+        id: "kazlit-a",
+        name: "Group A",
+        capacity: 12,
+        roomId: "room-102",
+        instructorId: "inst-ainur",
+        studentIds: [],
+        schedule: {
+          days: ["Mon", "Wed"],
+          start: "11:00",
+          end: "12:30",
+        },
+      },
+      {
+        id: "kazlit-b",
+        name: "Group B",
+        capacity: 12,
+        roomId: "room-102",
+        instructorId: "inst-ainur",
+        studentIds: [],
+        schedule: {
+          days: ["Tue", "Thu"],
+          start: "11:00",
+          end: "12:30",
+        },
+      },
+    ],
+  },
+  {
+    id: "course-eng-conv",
+    courseName: "English Conversation",
+    groups: [
+      {
+        id: "engconv-d",
+        name: "Group D",
+        capacity: 10,
+        roomId: "room-103",
+        instructorId: "inst-madina",
+        studentIds: [],
+        schedule: {
+          days: ["Tue", "Thu"],
+          start: "19:00",
+          end: "20:30",
+        },
+      },
+      {
+        id: "engconv-evening",
+        name: "Evening Group",
+        capacity: 12,
+        roomId: "room-103",
+        instructorId: "inst-madina",
+        studentIds: [],
+        schedule: {
+          days: ["Mon", "Wed", "Fri"],
+          start: "20:40",
+          end: "22:00",
+        },
+      },
+      {
+        id: "engconv-speaking-club",
+        name: "Speaking Club",
+        capacity: 14,
+        roomId: "room-101",
+        instructorId: "inst-alisher",
+        studentIds: [],
+        schedule: {
+          days: ["Fri"],
+          start: "18:00",
+          end: "19:30",
+        },
+      },
+    ],
+  },
 ];
 
 export function GET_AVAILABLE_CLASSES(): ClassCatalogItem[] {
   return CLASSES_DATA.map((item) => ({
-    name: item.name,
-    groups: [...item.groups],
+    name: item.courseName,
+    groups: item.groups.map((group) => group.name),
   }));
 }
 
