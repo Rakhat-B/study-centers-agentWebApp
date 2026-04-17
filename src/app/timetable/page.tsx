@@ -1,7 +1,8 @@
 "use client";
 
 import AppShell from "@/components/AppShell";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type CalendarEvent = {
@@ -18,24 +19,28 @@ type CalendarEvent = {
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const eventPalettes = [
   {
-    tileBg: "rgba(59, 130, 246, 0.24)",
-    tileBorder: "rgba(59, 130, 246, 0.34)",
-    stripe: "rgba(37, 99, 235, 0.9)",
+    card: "bg-blue-50/95",
+    border: "border-blue-200/80",
+    accent: "bg-blue-500",
+    text: "text-blue-900",
   },
   {
-    tileBg: "rgba(16, 185, 129, 0.22)",
-    tileBorder: "rgba(16, 185, 129, 0.34)",
-    stripe: "rgba(5, 150, 105, 0.9)",
+    card: "bg-emerald-50/95",
+    border: "border-emerald-200/80",
+    accent: "bg-emerald-500",
+    text: "text-emerald-900",
   },
   {
-    tileBg: "rgba(168, 85, 247, 0.23)",
-    tileBorder: "rgba(168, 85, 247, 0.34)",
-    stripe: "rgba(147, 51, 234, 0.9)",
+    card: "bg-violet-50/95",
+    border: "border-violet-200/80",
+    accent: "bg-violet-500",
+    text: "text-violet-900",
   },
   {
-    tileBg: "rgba(245, 158, 11, 0.24)",
-    tileBorder: "rgba(245, 158, 11, 0.34)",
-    stripe: "rgba(217, 119, 6, 0.9)",
+    card: "bg-amber-50/95",
+    border: "border-amber-200/80",
+    accent: "bg-amber-500",
+    text: "text-amber-900",
   },
 ];
 
@@ -47,14 +52,6 @@ function formatTime(mins: number) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function parseTimeToMinutes(value: string) {
-  const [h, m] = value.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) {
-    return null;
-  }
-  return h * 60 + m;
 }
 
 function startOfWeekMonday(date: Date) {
@@ -102,27 +99,61 @@ function eventPaletteForTitle(title: string) {
   return eventPalettes[index];
 }
 
+function formatDayNumber(date: Date) {
+  return date.getDate();
+}
+
+type EventCardProps = {
+  event: CalendarEvent;
+  top: number;
+  height: number;
+  isSelected: boolean;
+  onClick: () => void;
+};
+
+function EventCard({ event, top, height, isSelected, onClick }: EventCardProps) {
+  const palette = typeof event.paletteIndex === "number" ? eventPalettes[event.paletteIndex] : eventPaletteForTitle(event.title);
+
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        "group absolute left-2 right-2 rounded-xl border px-3 py-2 text-left transition-all duration-200",
+        "hover:scale-[1.02] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+        "shadow-sm",
+        palette.card,
+        palette.border,
+        isSelected ? "ring-2 ring-blue-500/45 shadow-lg scale-[1.01]" : "",
+      ].join(" ")}
+      style={{ top, height: Math.max(48, height) }}
+    >
+      <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-full ${palette.accent}`} aria-hidden />
+      <p className={`pl-2 text-[13px] font-bold leading-tight truncate ${palette.text}`}>{event.title}</p>
+      <p className="pl-2 mt-1 text-[11px] text-slate-600 truncate">
+        {formatTime(event.startMin)} - {formatTime(event.endMin)} • {event.room}
+      </p>
+      <p className="pl-2 text-[11px] text-slate-500 truncate">{event.instructor}</p>
+    </button>
+  );
+}
+
 export default function TimetablePage() {
+  const router = useRouter();
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [editInstructor, setEditInstructor] = useState("");
-  const [editStartTime, setEditStartTime] = useState("");
-  const [editEndTime, setEditEndTime] = useState("");
-  const [editPaletteIndex, setEditPaletteIndex] = useState<number>(0);
-  const [editError, setEditError] = useState<string | null>(null);
 
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
   const [now, setNow] = useState<Date>(() => new Date());
 
-  const startHour = 0;
-  const endHour = 24;
-  const pxPerMinute = 840 / ((endHour - startHour) * 60); // keep overall grid height visually similar
+  const startHour = 7;
+  const endHour = 23;
+  const pxPerMinute = 1.6;
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  const [events, setEvents] = useState<CalendarEvent[]>([
+  const [events] = useState<CalendarEvent[]>([
       {
         id: "e1",
         title: "IELTS Advanced-A",
@@ -163,6 +194,26 @@ export default function TimetablePage() {
         endMin: minutes(20, 30),
         paletteIndex: 3,
       },
+      {
+        id: "e5",
+        title: "Biology Olympiad",
+        instructor: "Aigerim Nurlan",
+        room: "B-108",
+        dayIndex: 2,
+        startMin: minutes(15, 0),
+        endMin: minutes(16, 30),
+        paletteIndex: 1,
+      },
+      {
+        id: "e6",
+        title: "SAT Math Intensive",
+        instructor: "Nursultan Sadykov",
+        room: "C-211",
+        dayIndex: 4,
+        startMin: minutes(13, 30),
+        endMin: minutes(15, 0),
+        paletteIndex: 0,
+      },
     ]);
 
   const gridHeight = (endHour - startHour) * 60 * pxPerMinute;
@@ -174,262 +225,167 @@ export default function TimetablePage() {
     () => events.find((event) => event.id === selectedEventId) ?? null,
     [events, selectedEventId]
   );
+  const nowDayIndex = useMemo(() => {
+    const day = now.getDay();
+    return day === 0 ? 6 : day - 1;
+  }, [now]);
+  const weekDates = useMemo(() => days.map((_, idx) => addDays(weekStart, idx)), [weekStart]);
+  const hourRows = useMemo(() => Array.from({ length: endHour - startHour + 1 }, (_, idx) => startHour + idx), [startHour, endHour]);
+  const halfHourRows = useMemo(() => Array.from({ length: (endHour - startHour) * 2 }, (_, i) => i), [startHour, endHour]);
 
   function openEditor(event: CalendarEvent) {
     setSelectedEventId(event.id);
-    setEditInstructor(event.instructor);
-    setEditStartTime(formatTime(event.startMin));
-    setEditEndTime(formatTime(event.endMin));
-    setEditPaletteIndex(event.paletteIndex ?? 0);
-    setEditError(null);
   }
 
   function closeEditor() {
     setSelectedEventId(null);
-    setEditError(null);
-  }
-
-  function saveEventChanges() {
-    if (!selectedEvent) {
-      return;
-    }
-    const startMin = parseTimeToMinutes(editStartTime);
-    const endMin = parseTimeToMinutes(editEndTime);
-    if (startMin === null || endMin === null) {
-      setEditError("Please enter valid start and end time.");
-      return;
-    }
-    if (startMin < 0 || endMin > 24 * 60 || endMin <= startMin) {
-      setEditError("End time must be after start time and within 24 hours.");
-      return;
-    }
-
-    setEvents((prev) =>
-      prev.map((event) =>
-        event.id === selectedEvent.id
-          ? {
-              ...event,
-              instructor: editInstructor.trim() || event.instructor,
-              startMin,
-              endMin,
-              paletteIndex: editPaletteIndex,
-            }
-          : event
-      )
-    );
-    closeEditor();
   }
 
   return (
     <AppShell>
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
-            Timetable
-          </h1>
-          <p className="text-[12px] mt-1" style={{ color: "rgba(29,29,31,0.45)" }}>
-            Weekly calendar view — click an event to view details
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setWeekStart(startOfWeekMonday(new Date()))}
-            className="px-3 py-2 rounded-full text-[12px] font-semibold transition-colors"
-            style={{
-              background: "rgba(255,255,255,0.28)",
-              border: "1px solid rgba(255,255,255,0.42)",
-              color: "rgba(29,29,31,0.75)",
-              cursor: "pointer",
-            }}
-          >
-            Today
-          </button>
-
-          <button
-            aria-label="Previous week"
-            onClick={() => setWeekStart((prev) => addDays(prev, -7))}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
-            style={{
-              background: "rgba(255,255,255,0.22)",
-              border: "1px solid rgba(255,255,255,0.38)",
-              color: "rgba(29,29,31,0.7)",
-              cursor: "pointer",
-            }}
-          >
-            <ChevronLeft size={18} />
-          </button>
-
-          <div
-            className="px-3 py-2 rounded-full text-[12px] font-semibold"
-            style={{
-              background: "rgba(255,255,255,0.22)",
-              border: "1px solid rgba(255,255,255,0.38)",
-              color: "rgba(29,29,31,0.7)",
-              minWidth: 180,
-              textAlign: "center",
-            }}
-          >
-            {rangeLabel}
+      <div className="rounded-2xl border border-slate-200/80 bg-white/85 shadow-sm px-4 py-4 md:px-5 md:py-5 mb-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
+              Timetable
+            </h1>
+            <p className="text-[12px] mt-1 text-slate-500">
+              Weekly calendar view - click an event to view details
+            </p>
           </div>
 
-          <button
-            aria-label="Next week"
-            onClick={() => setWeekStart((prev) => addDays(prev, 7))}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
-            style={{
-              background: "rgba(255,255,255,0.22)",
-              border: "1px solid rgba(255,255,255,0.38)",
-              color: "rgba(29,29,31,0.7)",
-              cursor: "pointer",
-            }}
-          >
-            <ChevronRight size={18} />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setWeekStart(startOfWeekMonday(new Date()))}
+              className="h-9 px-3.5 rounded-lg border border-slate-300 bg-white text-[12px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Today
+            </button>
+            <button
+              aria-label="Previous week"
+              onClick={() => setWeekStart((prev) => addDays(prev, -7))}
+              className="h-9 w-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              aria-label="Next week"
+              onClick={() => setWeekStart((prev) => addDays(prev, 7))}
+              className="h-9 w-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <div className="h-9 px-3 rounded-lg border border-slate-200 bg-slate-50 text-[12px] font-semibold text-slate-700 inline-flex items-center">
+              {rangeLabel}
+            </div>
+            <div className="h-9 px-2 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-medium text-slate-600 inline-flex items-center gap-1.5">
+              <CalendarDays size={14} />
+              Week
+            </div>
+          </div>
         </div>
       </div>
 
-      <div
-        className="rounded-2xl overflow-hidden"
-        style={{
-          border: "1px solid rgba(255,255,255,0.3)",
-          background: "rgba(255,255,255,0.08)",
-        }}
-      >
-        <div className="grid" style={{ gridTemplateColumns: "88px repeat(7, minmax(140px, 1fr))" }}>
-          <div
-            className="px-3 py-2 text-[11px] font-semibold"
-            style={{ background: "rgba(255,255,255,0.14)", color: "rgba(29,29,31,0.55)" }}
-          >
-            Time
-          </div>
-          {days.map((d) => (
-            <div
-              key={d}
-              className="px-3 py-2 text-[11px] font-semibold"
-              style={{ background: "rgba(255,255,255,0.14)", color: "rgba(29,29,31,0.55)" }}
-            >
-              {d}
+      <div className="rounded-2xl overflow-hidden border border-slate-200/80 bg-white/85 shadow-sm">
+        <div className="max-h-[76vh] overflow-y-auto">
+          <div className="sticky top-0 z-30">
+            <div className="grid" style={{ gridTemplateColumns: "88px repeat(7, minmax(145px, 1fr))" }}>
+              <div className="sticky left-0 z-30 px-3 py-3 text-[11px] font-semibold text-slate-700 border-r border-slate-200 bg-slate-100/95 backdrop-blur">
+                Time
+              </div>
+              {days.map((day, idx) => {
+                const isTodayColumn = idx === nowDayIndex;
+                return (
+                  <div
+                    key={day}
+                    className={[
+                      "px-3 py-3 border-r border-slate-200/80 relative",
+                      idx === 6 ? "border-r-0" : "",
+                      isTodayColumn ? "bg-blue-100/95 shadow-[inset_0_-2px_0_0_rgba(59,130,246,0.45)]" : "bg-slate-50/90",
+                    ].join(" ")}
+                  >
+                    <p className={`text-[11px] font-semibold ${isTodayColumn ? "text-blue-700" : "text-slate-500"}`}>{day}</p>
+                    <p className={`text-[16px] mt-0.5 font-semibold ${isTodayColumn ? "text-blue-900" : "text-slate-800"}`}>
+                      {formatDayNumber(weekDates[idx])}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          </div>
 
-        <div className="max-h-[72vh] overflow-y-auto" style={{ background: "rgba(255,255,255,0.04)" }}>
           <div className="relative">
-            {showNowIndicator ? (
-              <div className="absolute left-0 right-0 pointer-events-none" style={{ top: nowTop, zIndex: 20 }}>
-                <div className="relative" style={{ height: 0 }}>
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 88 - 4,
-                      top: -4,
-                      width: 8,
-                      height: 8,
-                      borderRadius: 9999,
-                      background: "rgba(255, 59, 48, 0.9)",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 88,
-                      right: 0,
-                      top: 0,
-                      height: 1,
-                      background: "rgba(255, 59, 48, 0.55)",
-                    }}
-                  />
+            {showNowIndicator && nowDayIndex >= 0 ? (
+              <div className="absolute pointer-events-none z-20" style={{ left: 88, right: 0, top: nowTop }}>
+                <div className="relative">
+                  <span className="absolute -left-[78px] -top-3 text-[10px] font-bold uppercase tracking-wide text-red-500">
+                    Now
+                  </span>
+                  <span className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-red-500 border-2 border-white shadow-sm" />
+                  <div className="h-[2px] bg-red-500/90 shadow-[0_0_0_1px_rgba(255,255,255,0.5)]" />
                 </div>
               </div>
             ) : null}
 
-            <div className="grid" style={{ gridTemplateColumns: "88px repeat(7, minmax(140px, 1fr))" }}>
-          <div
-            className="relative"
-            style={{
-              height: gridHeight,
-              borderRight: "1px solid rgba(29,29,31,0.05)",
-              background: "rgba(255,255,255,0.06)",
-            }}
-          >
-            {Array.from({ length: endHour - startHour + 1 }).map((_, idx) => {
-              const hour = startHour + idx;
-              const top = (hour - startHour) * 60 * pxPerMinute;
-              return (
-                <div
-                  key={hour}
-                  className="absolute left-0 right-0 px-3"
-                  style={{ top: top - 8, color: "rgba(29,29,31,0.5)" }}
-                >
-                  <span className="text-[10px] font-semibold">{String(hour).padStart(2, "0")}:00</span>
-                </div>
-              );
-            })}
-          </div>
-
-          {days.map((_, dayIndex) => (
-            <div
-              key={dayIndex}
-              className="relative"
-              style={{
-                height: gridHeight,
-                borderRight: dayIndex === 6 ? "none" : "1px solid rgba(29,29,31,0.05)",
-                background: "rgba(255,255,255,0.06)",
-              }}
-            >
-              {Array.from({ length: (endHour - startHour) * 2 }).map((__, i) => (
-                <div
-                  key={i}
-                  className="absolute left-0 right-0"
-                  style={{
-                    top: i * 30 * pxPerMinute,
-                    height: 0,
-                    borderTop: "1px solid rgba(29,29,31,0.045)",
-                  }}
-                />
-              ))}
-
-              {events
-                .filter((e) => e.dayIndex === dayIndex)
-                .map((e) => {
-                  const top = (e.startMin - startHour * 60) * pxPerMinute;
-                  const rawHeight = (e.endMin - e.startMin) * pxPerMinute;
-                  const palette = typeof e.paletteIndex === "number" ? eventPalettes[e.paletteIndex] : eventPaletteForTitle(e.title);
+            <div className="grid" style={{ gridTemplateColumns: "88px repeat(7, minmax(145px, 1fr))" }}>
+              <div className="sticky left-0 z-20 border-r border-slate-200 bg-slate-100/90 backdrop-blur relative" style={{ height: gridHeight }}>
+                {hourRows.map((hour) => {
+                  const top = (hour - startHour) * 60 * pxPerMinute;
                   return (
-                    <button
-                      key={e.id}
-                      onClick={() => openEditor(e)}
-                      className="group absolute left-1.5 right-1.5 rounded-[11px] px-3 py-2 text-left transform-gpu transition-all duration-200 ease-out hover:scale-[1.02] hover:shadow-[0_8px_18px_rgba(0,0,0,0.14)]"
-                      style={{
-                        top: top + 4,
-                        height: Math.max(36, rawHeight - 8),
-                        background: palette.tileBg,
-                        border: "1px solid rgba(0,0,0,0.05)",
-                        boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-                        color: "rgba(29,29,31,0.8)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full"
-                        style={{ background: palette.stripe }}
-                      />
-                      <p className="pl-1 text-[13px] font-semibold leading-tight truncate" style={{ color: "rgba(17,24,39,0.94)" }}>
-                        {e.title}
-                      </p>
-                      <p className="pl-1 text-[10px] mt-0.5 truncate" style={{ color: "rgba(55,65,81,0.72)" }}>
-                        {formatTime(e.startMin)}–{formatTime(e.endMin)} • {e.room}
-                      </p>
-                      <p className="pl-1 text-[10px] truncate" style={{ color: "rgba(55,65,81,0.65)" }}>
-                        {e.instructor}
-                      </p>
-                    </button>
+                    <div key={hour} className="absolute left-0 right-0 px-3" style={{ top: top - 9 }}>
+                      <span className="text-[11px] font-semibold text-slate-700">{String(hour).padStart(2, "0")}:00</span>
+                    </div>
                   );
                 })}
-            </div>
-          ))}
+              </div>
+
+              {days.map((_, dayIndex) => {
+                const dayEvents = events.filter((event) => event.dayIndex === dayIndex);
+                const isTodayColumn = dayIndex === nowDayIndex;
+
+                return (
+                  <div
+                    key={dayIndex}
+                    className={[
+                      "relative border-r border-slate-200/80",
+                      dayIndex === 6 ? "border-r-0" : "",
+                      isTodayColumn
+                        ? "bg-blue-50/70 shadow-[inset_1px_0_0_rgba(59,130,246,0.45),inset_-1px_0_0_rgba(59,130,246,0.45)]"
+                        : dayIndex % 2 === 0
+                          ? "bg-white"
+                          : "bg-slate-50/45",
+                    ].join(" ")}
+                    style={{ height: gridHeight }}
+                  >
+                    {halfHourRows.map((i) => (
+                      <div
+                        key={i}
+                        className={i % 2 === 0 ? "absolute left-0 right-0 border-t border-slate-200/80" : "absolute left-0 right-0 border-t border-slate-100"}
+                        style={{ top: i * 30 * pxPerMinute }}
+                      />
+                    ))}
+
+                    {dayEvents.length === 0 ? (
+                      <p className="absolute top-4 left-3 text-[11px] text-slate-400">No classes scheduled</p>
+                    ) : null}
+
+                    {dayEvents.map((event) => {
+                      const top = (event.startMin - startHour * 60) * pxPerMinute + 3;
+                      const height = (event.endMin - event.startMin) * pxPerMinute - 6;
+                      return (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          top={top}
+                          height={height}
+                          isSelected={event.id === selectedEventId}
+                          onClick={() => openEditor(event)}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -438,148 +394,71 @@ export default function TimetablePage() {
       {selectedEvent ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <button
-            aria-label="Close class editor"
-            className="absolute inset-0"
+            aria-label="Close class details"
+            className="absolute inset-0 bg-slate-900/35"
             onClick={closeEditor}
-            style={{ background: "rgba(7, 12, 24, 0.34)" }}
           />
 
-          <div
-            className="relative w-full max-w-lg rounded-2xl p-5 sm:p-6"
-            style={{
-              background: eventPalettes[editPaletteIndex].tileBg,
-              border: "1px solid rgba(255,255,255,0.52)",
-              boxShadow: "0 20px 40px rgba(10, 14, 22, 0.24)",
-              backdropFilter: "blur(16px)",
-            }}
-          >
+          <section className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[18px] font-bold leading-tight" style={{ color: "rgba(17,24,39,0.95)" }}>
+                <p className="text-[18px] font-semibold leading-tight text-slate-900">
                   {selectedEvent.title}
                 </p>
-                <p className="text-[12px] mt-1" style={{ color: "rgba(31,41,55,0.72)" }}>
-                  {days[selectedEvent.dayIndex]} • {selectedEvent.room}
+                <p className="text-[12px] mt-1 text-slate-500">
+                  {days[selectedEvent.dayIndex]} class details
                 </p>
               </div>
               <button
                 onClick={closeEditor}
-                className="rounded-full px-3 py-1.5 text-[12px] font-semibold"
-                style={{
-                  background: "rgba(255,255,255,0.5)",
-                  border: "1px solid rgba(255,255,255,0.65)",
-                  color: "rgba(29,29,31,0.75)",
-                }}
+                className="h-8 px-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-[12px] font-medium"
               >
                 Close
               </button>
             </div>
 
-            <div className="mt-5 grid gap-4">
-              <label className="block">
-                <span className="text-[12px] font-semibold" style={{ color: "rgba(31,41,55,0.8)" }}>
+            <div className="mt-4 space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-[12px] font-semibold text-slate-600 flex items-center gap-1.5">
+                  <UserRound size={13} />
                   Instructor
-                </span>
-                <input
-                  value={editInstructor}
-                  onChange={(e) => setEditInstructor(e.target.value)}
-                  className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[13px] outline-none"
-                  style={{
-                    background: "rgba(255,255,255,0.68)",
-                    border: "1px solid rgba(255,255,255,0.78)",
-                    color: "rgba(17,24,39,0.95)",
-                  }}
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(31,41,55,0.8)" }}>
-                    Start time
-                  </span>
-                  <input
-                    type="time"
-                    value={editStartTime}
-                    onChange={(e) => setEditStartTime(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[13px] outline-none"
-                    style={{
-                      background: "rgba(255,255,255,0.68)",
-                      border: "1px solid rgba(255,255,255,0.78)",
-                      color: "rgba(17,24,39,0.95)",
-                    }}
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(31,41,55,0.8)" }}>
-                    End time
-                  </span>
-                  <input
-                    type="time"
-                    value={editEndTime}
-                    onChange={(e) => setEditEndTime(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[13px] outline-none"
-                    style={{
-                      background: "rgba(255,255,255,0.68)",
-                      border: "1px solid rgba(255,255,255,0.78)",
-                      color: "rgba(17,24,39,0.95)",
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div>
-                <p className="text-[12px] font-semibold" style={{ color: "rgba(31,41,55,0.8)" }}>
-                  Class color
                 </p>
-                <div className="mt-2 flex items-center gap-2">
-                  {eventPalettes.map((palette, idx) => (
-                    <button
-                      key={palette.stripe}
-                      onClick={() => setEditPaletteIndex(idx)}
-                      className="h-8 w-8 rounded-full transition-transform hover:scale-105"
-                      style={{
-                        background: palette.stripe,
-                        border: editPaletteIndex === idx ? "2px solid rgba(17,24,39,0.75)" : "2px solid rgba(255,255,255,0.7)",
-                      }}
-                      aria-label={`Set class color ${idx + 1}`}
-                    />
-                  ))}
-                </div>
+                <p className="text-[13px] mt-1 text-slate-900">{selectedEvent.instructor}</p>
               </div>
-
-              {editError ? (
-                <p className="text-[12px] font-medium" style={{ color: "rgba(185, 28, 28, 0.92)" }}>
-                  {editError}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-[12px] font-semibold text-slate-600 flex items-center gap-1.5">
+                  <Clock3 size={13} />
+                    Time
                 </p>
-              ) : null}
+                <p className="text-[13px] mt-1 text-slate-900">
+                  {formatTime(selectedEvent.startMin)} - {formatTime(selectedEvent.endMin)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-[12px] font-semibold text-slate-600 flex items-center gap-1.5">
+                  <MapPin size={13} />
+                  Room
+                </p>
+                <p className="text-[13px] mt-1 text-slate-900">{selectedEvent.room}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="text-[12px] font-semibold text-slate-600 flex items-center gap-1.5">
+                  <BookOpen size={13} />
+                  Subject
+                </p>
+                <p className="text-[13px] mt-1 text-slate-900">{selectedEvent.title.split(" ")[0]}</p>
+              </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-5 flex justify-end">
               <button
-                onClick={closeEditor}
-                className="px-3.5 py-2 rounded-full text-[12px] font-semibold"
-                style={{
-                  background: "rgba(255,255,255,0.5)",
-                  border: "1px solid rgba(255,255,255,0.65)",
-                  color: "rgba(29,29,31,0.75)",
-                }}
+                onClick={() => router.push("/manage/classes")}
+                className="h-9 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-[13px] font-semibold transition-colors"
               >
-                Cancel
-              </button>
-              <button
-                onClick={saveEventChanges}
-                className="px-3.5 py-2 rounded-full text-[12px] font-semibold"
-                style={{
-                  background: "rgba(17,24,39,0.86)",
-                  border: "1px solid rgba(17,24,39,0.9)",
-                  color: "rgba(255,255,255,0.95)",
-                }}
-              >
-                Save changes
+                Edit in Classes
               </button>
             </div>
-          </div>
+          </section>
         </div>
       ) : null}
     </AppShell>
