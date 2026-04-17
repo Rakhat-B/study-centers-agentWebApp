@@ -6,7 +6,13 @@ export interface Student {
   name: string;
   phone: string;
   course: string;
+  groupName?: string;
+  gender?: "male" | "female" | "other";
   pipelineStatus: "lead" | "evaluating" | "active";
+  evaluationProgress?: string;
+  testingScore?: number;
+  freezeStart?: string;
+  freezeEnd?: string;
   registeredAt: string;
 }
 
@@ -72,6 +78,26 @@ export interface PaymentAlert {
   course: string;
   dueInHours: number;
   amount: number;
+}
+
+export type ClassCatalogItem = {
+  name: string;
+  groups: string[];
+};
+
+export const CLASSES_DATA: ClassCatalogItem[] = [
+  { name: "IELTS Preparation", groups: ["Group A", "Group B", "Evening Group"] },
+  { name: "Mathematics (Grade 9)", groups: ["Group A", "Group B", "Weekend Group"] },
+  { name: "Physics (ENT Track)", groups: ["Group C", "Group D", "Intensive Group"] },
+  { name: "Kazakh Literature", groups: ["Group A", "Group B"] },
+  { name: "English Conversation", groups: ["Group D", "Evening Group", "Speaking Club"] },
+];
+
+export function GET_AVAILABLE_CLASSES(): ClassCatalogItem[] {
+  return CLASSES_DATA.map((item) => ({
+    name: item.name,
+    groups: [...item.groups],
+  }));
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -144,6 +170,8 @@ export const mockStudentLeads: Student[] = [
     name: "Daulet Nurmagambetov",
     phone: "+7 701 234 5678",
     course: "IELTS Preparation",
+    groupName: "Group A",
+    gender: "male",
     pipelineStatus: "lead",
     registeredAt: "2026-03-20T08:15:00Z",
   },
@@ -152,7 +180,11 @@ export const mockStudentLeads: Student[] = [
     name: "Zhansaya Beisenova",
     phone: "+7 777 987 6543",
     course: "Mathematics (Grade 9)",
+    groupName: "Group B",
+    gender: "female",
     pipelineStatus: "evaluating",
+    testingScore: 72,
+    evaluationProgress: "Placement test: 72%",
     registeredAt: "2026-03-20T09:30:00Z",
   },
   {
@@ -160,7 +192,11 @@ export const mockStudentLeads: Student[] = [
     name: "Amir Serikbaev",
     phone: "+7 747 456 7890",
     course: "Physics (ENT Track)",
+    groupName: "Group C",
+    gender: "male",
     pipelineStatus: "active",
+    freezeStart: "2026-04-01",
+    freezeEnd: "2026-05-10",
     registeredAt: "2026-03-20T10:00:00Z",
   },
   {
@@ -168,6 +204,8 @@ export const mockStudentLeads: Student[] = [
     name: "Kamila Rakhimova",
     phone: "+7 705 321 0987",
     course: "Kazakh Literature",
+    groupName: "Group A",
+    gender: "female",
     pipelineStatus: "lead",
     registeredAt: "2026-03-20T11:45:00Z",
   },
@@ -180,7 +218,11 @@ export const mockStudentsDirectory: Student[] = [
     name: "Aruzhan Kairat",
     phone: "+7 702 111 2233",
     course: "English Conversation",
+    groupName: "Group D",
+    gender: "female",
     pipelineStatus: "evaluating",
+    testingScore: 54,
+    evaluationProgress: "Interview pending",
     registeredAt: "2026-03-18T12:20:00Z",
   },
   {
@@ -188,7 +230,11 @@ export const mockStudentsDirectory: Student[] = [
     name: "Nurzhan Kasymov",
     phone: "+7 775 333 4455",
     course: "IELTS Preparation",
+    groupName: "Group A",
+    gender: "male",
     pipelineStatus: "active",
+    freezeStart: "2026-04-10",
+    freezeEnd: "2026-04-20",
     registeredAt: "2026-02-25T08:00:00Z",
   },
   {
@@ -196,6 +242,8 @@ export const mockStudentsDirectory: Student[] = [
     name: "Saltanat Yessimova",
     phone: "+7 707 888 9900",
     course: "Mathematics (Grade 9)",
+    groupName: "Group C",
+    gender: "female",
     pipelineStatus: "lead",
     registeredAt: "2026-03-29T15:10:00Z",
   },
