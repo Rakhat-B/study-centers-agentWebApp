@@ -2,15 +2,19 @@
 
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
-import { INITIAL_AUTH_STATE, logIn, signUp } from "../actions";
+import { logIn, signUp } from "../actions";
 
 type AuthMode = "login" | "signup";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login");
 
-  const [loginState, loginAction, isLoginPending] = useActionState(logIn, INITIAL_AUTH_STATE);
-  const [signUpState, signUpAction, isSignUpPending] = useActionState(signUp, INITIAL_AUTH_STATE);
+   // 1. Define the initial state right here
+   const initialState = { error: null, success: false };
+
+   // 2. Pass 'initialState' instead of 'INITIAL_AUTH_STATE'
+   const [loginState, loginAction, isLoginPending] = useActionState(logIn, initialState);
+   const [signUpState, signUpAction, isSignUpPending] = useActionState(signUp, initialState);
 
   const activeAction = mode === "login" ? loginAction : signUpAction;
   const activeState = mode === "login" ? loginState : signUpState;
@@ -113,11 +117,10 @@ export default function LoginPage() {
                 />
                 <input
                   required
-                  minLength={6}
                   type="password"
                   name="password"
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  placeholder="At least 6 characters"
+                  placeholder="Enter your password"
                   className="w-full rounded-2xl border border-white/50 bg-white/45 py-3 pl-10 pr-3 text-[14px] text-[var(--foreground)] outline-none transition focus:border-[#0071e3] focus:bg-white/70"
                 />
               </div>
