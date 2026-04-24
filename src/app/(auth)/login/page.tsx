@@ -2,19 +2,15 @@
 
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
-import { logIn, signUp } from "../actions";
+import { INITIAL_AUTH_STATE, logIn, signUp } from "../actions";
 
 type AuthMode = "login" | "signup";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login");
 
-   // 1. Define the initial state right here
-   const initialState = { error: null, success: false };
-
-   // 2. Pass 'initialState' instead of 'INITIAL_AUTH_STATE'
-   const [loginState, loginAction, isLoginPending] = useActionState(logIn, initialState);
-   const [signUpState, signUpAction, isSignUpPending] = useActionState(signUp, initialState);
+  const [loginState, loginAction, isLoginPending] = useActionState(logIn, INITIAL_AUTH_STATE);
+  const [signUpState, signUpAction, isSignUpPending] = useActionState(signUp, INITIAL_AUTH_STATE);
 
   const activeAction = mode === "login" ? loginAction : signUpAction;
   const activeState = mode === "login" ? loginState : signUpState;

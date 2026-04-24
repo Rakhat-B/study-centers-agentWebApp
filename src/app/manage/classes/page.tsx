@@ -10,6 +10,7 @@ type RawGroupRow = RecordLike & {
   rooms?: RecordLike | RecordLike[] | null;
   instructors?: RecordLike | RecordLike[] | null;
   schedule_days?: unknown;
+  group_students?: RecordLike[] | null;
 };
 
 type RawCourseRow = RecordLike & {
@@ -182,11 +183,18 @@ function mapRawCoursesToUi(rawCourses: RawCourseRow[]): UiCourse[] {
     const groups: UiGroup[] = rawGroups.map((group, groupIndex) => {
       const room = readRelation(group.rooms);
       const instructor = readRelation(group.instructors);
+      const groupStudentCountRelation = Array.isArray(group.group_students)
+        ? group.group_students[0]
+        : null;
+      const groupStudentCount =
+        groupStudentCountRelation && typeof groupStudentCountRelation === "object"
+          ? readNumber(groupStudentCountRelation as RecordLike, ["count"], 0)
+          : 0;
 
       const enrolled = readNumber(
         group,
         ["student_count", "students_count", "participants", "enrolled_count"],
-        0,
+        groupStudentCount,
       );
       const capacity = readNumber(group, ["capacity", "max_capacity", "max_participants"], 0);
       const usage = capacity > 0 ? Math.min(100, Math.round((enrolled / capacity) * 100)) : 0;
@@ -233,7 +241,7 @@ export default async function ClassesDirectoryPage() {
 
   const { data: rawCourses, error } = await supabase
     .from("courses")
-    .select("*, groups(*, rooms(*), instructors(*))");
+    .select("*, groups(*, rooms(*), instructors(*), group_students(count))");
 
   console.log("SUPABASE DATA:", JSON.stringify(rawCourses, null, 2));
   console.log("SUPABASE ERROR:", error);

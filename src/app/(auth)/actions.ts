@@ -8,7 +8,7 @@ export type AuthActionState = {
   message: string | null;
 };
 
-const INITIAL_AUTH_STATE: AuthActionState = {
+export const INITIAL_AUTH_STATE: AuthActionState = {
   status: "idle",
   message: null,
 };
