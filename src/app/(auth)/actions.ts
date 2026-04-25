@@ -8,11 +8,6 @@ export type AuthActionState = {
   message: string | null;
 };
 
-export const INITIAL_AUTH_STATE: AuthActionState = {
-  status: "idle",
-  message: null,
-};
-
 function getCredential(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";

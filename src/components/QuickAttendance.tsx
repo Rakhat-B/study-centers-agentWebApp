@@ -2,14 +2,13 @@
 
 import { CheckCheck } from "lucide-react";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
+import type { DashboardAttendanceSummary } from "@/app/dashboard/DashboardClient";
 
-const attendanceSummary = [
-  { label: "Present", value: "24" },
-  { label: "Late", value: "3" },
-  { label: "Absent", value: "2" },
-];
+type QuickAttendanceProps = {
+  summary: DashboardAttendanceSummary[];
+};
 
-export default function QuickAttendance() {
+export default function QuickAttendance({ summary }: QuickAttendanceProps) {
   return (
     <div className="glass-card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -27,8 +26,13 @@ export default function QuickAttendance() {
         </div>
       </div>
 
+      {summary.length === 0 ? (
+        <p className="text-[12px]" style={{ color: "rgba(29,29,31,0.5)" }}>
+          No attendance data available.
+        </p>
+      ) : null}
       <div className="grid grid-cols-3 gap-2">
-        {attendanceSummary.map((item) => (
+        {summary.map((item) => (
           <div
             key={item.label}
             className="rounded-xl px-2.5 py-2 text-center"

@@ -1,11 +1,15 @@
 "use client";
 
 import { Activity } from "lucide-react";
-import { mockCenterInsights } from "@/data/mock";
 import { t } from "@/lib/i18n";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
+import type { DashboardInsight } from "@/app/dashboard/DashboardClient";
 
-export default function CenterIntelligence() {
+type CenterIntelligenceProps = {
+  insights: DashboardInsight[];
+};
+
+export default function CenterIntelligence({ insights }: CenterIntelligenceProps) {
   return (
     <div className="glass-card p-5 flex flex-col gap-4 h-full">
       <div className="flex items-center justify-between">
@@ -19,7 +23,12 @@ export default function CenterIntelligence() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        {mockCenterInsights.map((item) => (
+        {insights.length === 0 ? (
+          <p className="text-[12px]" style={{ color: "rgba(29,29,31,0.5)" }}>
+            No insights available yet.
+          </p>
+        ) : null}
+        {insights.map((item) => (
           <div
             key={item.id}
             className="rounded-xl px-3 py-2.5"

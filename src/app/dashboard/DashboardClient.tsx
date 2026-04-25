@@ -25,8 +25,74 @@ export type DashboardStats = {
   totalGroups: number;
 };
 
+export type DashboardClassSession = {
+  id: string;
+  name: string;
+  teacher: string;
+  room: string;
+  time: string;
+  participants: number;
+  maxParticipants: number;
+  isLive: boolean;
+};
+
+export type DashboardLead = {
+  id: string;
+  name: string;
+  phone: string;
+  course: string;
+  pipelineStatus: "lead" | "evaluating" | "active";
+};
+
+export type DashboardPayment = {
+  id: string;
+  studentName: string;
+  amount: number;
+  course: string;
+  kaspiStatus: "paid" | "pending" | "failed";
+};
+
+export type DashboardInsight = {
+  id: string;
+  label: string;
+  value: string;
+  trend: string;
+  trendType: "up" | "down" | "stable";
+};
+
+export type DashboardPaymentAlert = {
+  id: string;
+  studentName: string;
+  course: string;
+  dueInHours: number;
+  amount: number;
+};
+
+export type DashboardInstructorScheduleItem = {
+  id: string;
+  className: string;
+  time: string;
+  room: string;
+};
+
+export type DashboardAttendanceSummary = {
+  label: string;
+  value: number;
+};
+
+export type DashboardData = {
+  classes: DashboardClassSession[];
+  pendingLeads: DashboardLead[];
+  recentPayments: DashboardPayment[];
+  centerInsights: DashboardInsight[];
+  paymentAlerts: DashboardPaymentAlert[];
+  instructorSchedule: DashboardInstructorScheduleItem[];
+  attendanceSummary: DashboardAttendanceSummary[];
+};
+
 type DashboardClientProps = {
   stats: DashboardStats;
+  data: DashboardData;
 };
 
 type TileConfig = {
@@ -36,7 +102,7 @@ type TileConfig = {
   render: () => React.ReactNode;
 };
 
-function DashboardContent({ stats }: DashboardClientProps) {
+function DashboardContent({ stats, data }: DashboardClientProps) {
   const { editMode, toggleEditMode, visibleWidgets, toggleWidgetVisibility, currentRole } = useDashboard();
 
   const defaultTileOrderByRole: Record<UserRole, DashboardWidgetId[]> = {
@@ -58,46 +124,46 @@ function DashboardContent({ stats }: DashboardClientProps) {
         id: "classes",
         title: t("classes.today", "Today's Classes"),
         href: "#classes",
-        render: () => <TodaysClasses />,
+        render: () => <TodaysClasses sessions={data.classes} />,
       },
       {
         id: "registration",
         title: t("pending.title", "Pending Registration"),
         href: "#students",
-        render: () => <PendingRegistration />,
+        render: () => <PendingRegistration leads={data.pendingLeads} />,
       },
       {
         id: "intelligence",
         title: t("intelligence.title", "Center Intelligence"),
         href: "#reports",
-        render: () => <CenterIntelligence />,
+        render: () => <CenterIntelligence insights={data.centerInsights} />,
       },
       {
         id: "payments",
         title: t("payments.title", "Bank Feed & Payments"),
         href: "#payments",
-        render: () => <RecentPayments />,
+        render: () => <RecentPayments payments={data.recentPayments} />,
       },
       {
         id: "instructorSchedule",
         title: t("instructor.schedule", "Instructor Schedule"),
         href: "#my-schedule",
-        render: () => <InstructorSchedule />,
+        render: () => <InstructorSchedule schedule={data.instructorSchedule} />,
       },
       {
         id: "quickAttendance",
         title: t("instructor.quickAttendance", "Quick Attendance"),
         href: "#my-classes",
-        render: () => <QuickAttendance />,
+        render: () => <QuickAttendance summary={data.attendanceSummary} />,
       },
       {
         id: "alerts",
         title: t("alerts.title", "Payment Alerts"),
         href: "#payments",
-        render: () => <PaymentAlerts />,
+        render: () => <PaymentAlerts alerts={data.paymentAlerts} />,
       },
     ],
-    []
+    [data]
   );
 
   const tilesById = useMemo(() => {
@@ -362,6 +428,6 @@ function DashboardContent({ stats }: DashboardClientProps) {
   );
 }
 
-export default function DashboardClient({ stats }: DashboardClientProps) {
-  return <DashboardContent stats={stats} />;
+export default function DashboardClient({ stats, data }: DashboardClientProps) {
+  return <DashboardContent stats={stats} data={data} />;
 }

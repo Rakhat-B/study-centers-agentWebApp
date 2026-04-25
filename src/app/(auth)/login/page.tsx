@@ -2,9 +2,14 @@
 
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
-import { INITIAL_AUTH_STATE, logIn, signUp } from "../actions";
+import { logIn, signUp } from "../actions";
 
 type AuthMode = "login" | "signup";
+
+const INITIAL_AUTH_STATE = {
+  status: "idle",
+  message: null,
+} as const;
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("login");

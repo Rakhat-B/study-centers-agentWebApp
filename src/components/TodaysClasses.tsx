@@ -1,12 +1,29 @@
 "use client";
 
 import { Clock, Users } from "lucide-react";
-import { getClasses, formatTime, isLive } from "@/data/mock";
 import { t } from "@/lib/i18n";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
+import type { DashboardClassSession } from "@/app/dashboard/DashboardClient";
 
-export default function TodaysClasses() {
-  const classes = getClasses();
+type TodaysClassesProps = {
+  sessions: DashboardClassSession[];
+};
+
+function formatTime(value: string): string {
+  const [hoursRaw, minutesRaw] = value.split(":");
+  const hours = Number(hoursRaw);
+  const minutes = Number(minutesRaw);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return value;
+  }
+
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+export default function TodaysClasses({ sessions }: TodaysClassesProps) {
 
   return (
     <div className="glass-card p-5 flex flex-col gap-4">
@@ -15,7 +32,7 @@ export default function TodaysClasses() {
         <div>
           <WidgetTitleLink href="#classes" title={t("classes.today", "Today's Classes")} />
           <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
-            {classes.length} {t("classes.sessionsScheduled", "sessions scheduled")}
+            {sessions.length} {t("classes.sessionsScheduled", "sessions scheduled")}
           </p>
         </div>
         <Clock size={16} style={{ color: "rgba(29,29,31,0.3)" }} />
@@ -23,8 +40,13 @@ export default function TodaysClasses() {
 
       {/* Class feed */}
       <div className="flex flex-col gap-2">
-        {classes.map((session) => {
-          const live = isLive(session);
+        {sessions.length === 0 ? (
+          <p className="text-[12px]" style={{ color: "rgba(29,29,31,0.5)" }}>
+            No classes scheduled for today.
+          </p>
+        ) : null}
+        {sessions.map((session) => {
+          const live = session.isLive;
           return (
             <div
               key={session.id}

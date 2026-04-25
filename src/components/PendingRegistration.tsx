@@ -1,13 +1,17 @@
 "use client";
 
 import { UserPlus, Phone, BookOpen, MessageCircle } from "lucide-react";
-import { mockStudentLeads, type Student } from "@/data/mock";
 import { useState } from "react";
 import { t } from "@/lib/i18n";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
-import PipelineStatusBadge from "@/components/PipelineStatusBadge";
+import PipelineStatusBadge, { type PipelineStatus } from "@/components/PipelineStatusBadge";
+import type { DashboardLead } from "@/app/dashboard/DashboardClient";
 
-function pipelineHint(status: Student["pipelineStatus"]) {
+type PendingRegistrationProps = {
+  leads: DashboardLead[];
+};
+
+function pipelineHint(status: PipelineStatus) {
   switch (status) {
     case "lead":
       return "Asked Questions";
@@ -18,7 +22,7 @@ function pipelineHint(status: Student["pipelineStatus"]) {
   }
 }
 
-export default function PendingRegistration() {
+export default function PendingRegistration({ leads }: PendingRegistrationProps) {
   const [added, setAdded] = useState<Set<string>>(new Set());
 
   const handleQuickAdd = (id: string) => {
@@ -32,7 +36,7 @@ export default function PendingRegistration() {
         <div>
           <WidgetTitleLink href="#students" title={t("pending.title", "Pending Registration")} />
           <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
-            {mockStudentLeads.length} {t("pending.newLeads", "new leads today")}
+            {leads.length} {t("pending.newLeads", "new leads today")}
           </p>
         </div>
         <div
@@ -42,13 +46,18 @@ export default function PendingRegistration() {
             color: "var(--accent)",
           }}
         >
-          {mockStudentLeads.length}
+          {leads.length}
         </div>
       </div>
 
       {/* Leads list */}
       <div className="flex flex-col gap-2">
-        {mockStudentLeads.map((student) => {
+        {leads.length === 0 ? (
+          <p className="text-[12px]" style={{ color: "rgba(29,29,31,0.5)" }}>
+            No pending leads right now.
+          </p>
+        ) : null}
+        {leads.map((student) => {
           const isAdded = added.has(student.id);
           return (
             <div
