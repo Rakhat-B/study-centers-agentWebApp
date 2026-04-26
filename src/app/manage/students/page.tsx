@@ -9,8 +9,12 @@ import StudentsDirectoryClient, {
 
 type RecordLike = Record<string, unknown>;
 
+type RawGroupRow = RecordLike & {
+  courses?: RecordLike | RecordLike[] | null;
+};
+
 type RawGroupStudentRow = RecordLike & {
-  groups?: RecordLike | RecordLike[] | null;
+  groups?: RawGroupRow | RawGroupRow[] | null;
 };
 
 type RawStudentRow = RecordLike & {
@@ -49,30 +53,50 @@ function readRelations(value: unknown): RecordLike[] {
   return [];
 }
 
-function extractGroupNames(student: RawStudentRow): string[] {
-  if (!Array.isArray(student.group_students)) {
-    return [];
+function readCourseNameFromGroup(group: RecordLike): string {
+  const rawCourse = readRelations((group as RawGroupRow).courses)[0] ?? null;
+
+  if (!rawCourse) {
+    return "";
   }
 
-  const groupNames = student.group_students
-    .flatMap((groupStudent) => readRelations(groupStudent.groups))
-    .map((group) => readString(group, ["name"], ""))
-    .filter(Boolean);
-
-  return Array.from(new Set(groupNames));
+  return readString(rawCourse, ["name"], "");
 }
 
-function mapRawStudents(rawStudents: RawStudentRow[]): {
-  studentsByStatus: StudentsByStatus;
-  availableClasses: AvailableClassOption[];
+function extractPrimaryGroup(student: RawStudentRow): {
+  groupId?: string;
+  groupName?: string;
+  courseName?: string;
 } {
+  if (!Array.isArray(student.group_students)) {
+    return {};
+  }
+
+  const firstGroup = student.group_students
+    .flatMap((groupStudent) => readRelations(groupStudent.groups))
+    .find((group) => Boolean(group));
+
+  if (!firstGroup) {
+    return {};
+  }
+
+  const groupId = readString(firstGroup, ["id"], "");
+  const groupName = readString(firstGroup, ["name"], "");
+  const courseName = readCourseNameFromGroup(firstGroup);
+
+  return {
+    groupId: groupId || undefined,
+    groupName: groupName || undefined,
+    courseName: courseName || undefined,
+  };
+}
+
+function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
   const studentsByStatus: StudentsByStatus = {
     active: [],
     evaluating: [],
     leads: [],
   };
-
-  const uniqueGroupNames = new Set<string>();
 
   rawStudents.forEach((student, index) => {
     const id = readString(student, ["id"], `student-${index + 1}`);
@@ -82,11 +106,8 @@ function mapRawStudents(rawStudents: RawStudentRow[]): {
     const phone = readString(student, ["phone"], "No phone");
     const registeredAt = readString(student, ["created_at", "registered_at"], new Date().toISOString());
 
-    const groupNames = extractGroupNames(student);
-    groupNames.forEach((groupName) => uniqueGroupNames.add(groupName));
-
-    const primaryGroupName = groupNames[0];
-    const course = primaryGroupName ?? "Unassigned";
+    const { groupName, courseName } = extractPrimaryGroup(student);
+    const course = courseName || readString(student, ["course", "interested_course"], groupName ?? "Unassigned");
 
     const status = readString(student, ["status"], "lead").toLowerCase();
 
@@ -109,7 +130,7 @@ function mapRawStudents(rawStudents: RawStudentRow[]): {
         name: fullName,
         phone,
         course,
-        groupName: primaryGroupName,
+        groupName,
         pipelineStatus: status,
         registeredAt,
         internalNotes: "",
@@ -119,16 +140,57 @@ function mapRawStudents(rawStudents: RawStudentRow[]): {
     }
   });
 
-  const sortedGroupNames = Array.from(uniqueGroupNames).sort((a, b) => a.localeCompare(b));
+  return studentsByStatus;
+}
 
-  const availableClasses: AvailableClassOption[] = sortedGroupNames.length
-    ? [{ name: "Live Programs", groups: sortedGroupNames }]
-    : [{ name: "Unassigned", groups: [] }];
+function mapRawGroupsToAvailableClasses(rawGroups: RawGroupRow[]): AvailableClassOption[] {
+  if (!rawGroups.length) {
+    return [{ name: "Unassigned", groups: [] }];
+  }
 
-  return {
-    studentsByStatus,
-    availableClasses,
-  };
+  const groupsByCourse = new Map<string, AvailableClassOption["groups"]>();
+
+  rawGroups.forEach((group, index) => {
+    const id = readString(group, ["id"], `group-${index + 1}`);
+    const groupName = readString(group, ["name"], `Group ${index + 1}`);
+    const courseName = readCourseNameFromGroup(group) || "Unassigned";
+
+    if (!groupsByCourse.has(courseName)) {
+      groupsByCourse.set(courseName, []);
+    }
+
+    groupsByCourse.get(courseName)?.push({
+      id,
+      name: groupName,
+    });
+  });
+
+  return Array.from(groupsByCourse.entries())
+    .sort(([courseA], [courseB]) => courseA.localeCompare(courseB))
+    .map(([name, groups]) => ({
+      name,
+      groups: [...groups].sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+}
+
+function buildClientKey(rawStudents: RawStudentRow[], rawGroups: RawGroupRow[]) {
+  const studentKey = rawStudents
+    .map((student) => {
+      const id = readString(student, ["id"], "unknown-student");
+      const updatedAt = readString(student, ["updated_at", "created_at"], "");
+      return `${id}:${updatedAt}`;
+    })
+    .join("|");
+
+  const groupKey = rawGroups
+    .map((group) => {
+      const id = readString(group, ["id"], "unknown-group");
+      const updatedAt = readString(group, ["updated_at", "created_at"], "");
+      return `${id}:${updatedAt}`;
+    })
+    .join("|");
+
+  return `${studentKey}__${groupKey}`;
 }
 
 export default async function StudentsDirectoryPage() {
@@ -142,18 +204,33 @@ export default async function StudentsDirectoryPage() {
     redirect("/login");
   }
 
-  const { data: rawStudents, error } = await supabase
-    .from("students")
-    .select("*, group_students(groups(name))");
+  const [{ data: rawStudents, error: studentsError }, { data: rawGroups, error: groupsError }] = await Promise.all([
+    supabase
+      .from("students")
+      .select("*, group_students(groups(id, name, courses(name)))"),
+    supabase
+      .from("groups")
+      .select("id, name, courses(name)"),
+  ]);
 
-  if (error) {
-    console.error("SUPABASE STUDENTS ERROR:", error);
+  if (studentsError) {
+    console.error("SUPABASE STUDENTS ERROR:", studentsError);
   }
 
-  const { studentsByStatus, availableClasses } = mapRawStudents((rawStudents ?? []) as RawStudentRow[]);
+  if (groupsError) {
+    console.error("SUPABASE GROUPS ERROR:", groupsError);
+  }
+
+  const studentRows = (rawStudents ?? []) as RawStudentRow[];
+  const groupRows = (rawGroups ?? []) as RawGroupRow[];
+
+  const studentsByStatus = mapRawStudents(studentRows);
+  const availableClasses = mapRawGroupsToAvailableClasses(groupRows);
+  const clientKey = buildClientKey(studentRows, groupRows);
 
   return (
     <StudentsDirectoryClient
+      key={clientKey}
       initialStudentsByStatus={studentsByStatus}
       initialAvailableClasses={availableClasses}
     />

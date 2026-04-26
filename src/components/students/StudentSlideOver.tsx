@@ -1,15 +1,23 @@
 "use client";
 
-import { X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { LoaderCircle, X } from "lucide-react";
+import { useActionState, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { toast } from "sonner";
+import { addStudent } from "@/actions/mutations";
 
-export type StudentFormStatus = "pending" | "registered";
+export type StudentFormStatus = "lead" | "evaluating" | "active";
+
+export type GroupSelectOption = {
+  id: string;
+  name: string;
+};
 
 export type StudentFormData = {
   firstName: string;
   lastName: string;
   phone: string;
   course: string;
+  groupId: string;
   groupName: string;
   gender: "male" | "female" | "other";
   status: StudentFormStatus;
@@ -21,22 +29,15 @@ type StudentSlideOverProps = {
   isOpen: boolean;
   mode: "add" | "edit" | "review";
   courses: string[];
-  groupsByCourse: Record<string, string[]>;
+  groupsByCourse: Record<string, GroupSelectOption[]>;
   initialData: StudentFormData;
   onClose: () => void;
   onSave: (data: StudentFormData) => void;
 };
 
-const EMPTY_FORM: StudentFormData = {
-  firstName: "",
-  lastName: "",
-  phone: "",
-  course: "",
-  groupName: "",
-  gender: "other",
-  status: "pending",
-  testingScore: "",
-  notes: "",
+const INITIAL_MUTATION_ACTION_STATE = {
+  success: false,
+  message: "",
 };
 
 export default function StudentSlideOver({
@@ -48,16 +49,78 @@ export default function StudentSlideOver({
   onClose,
   onSave,
 }: StudentSlideOverProps) {
-  const [form, setForm] = useState<StudentFormData>(initialData);
+  const initialGroups = initialData.course ? groupsByCourse[initialData.course] ?? [] : [];
+  const initialMatchedGroup = initialData.groupId
+    ? initialGroups.find((group) => group.id === initialData.groupId)
+    : initialGroups.find((group) => group.name === initialData.groupName);
+
+  const [actionState, submitAddStudent, isActionPending] = useActionState(
+    addStudent,
+    INITIAL_MUTATION_ACTION_STATE,
+  );
+  const [isTransitionPending, startTransition] = useTransition();
+  const [form, setForm] = useState<StudentFormData>({
+    ...initialData,
+    groupId: initialMatchedGroup?.id ?? "",
+    groupName: initialMatchedGroup?.name ?? initialData.groupName,
+  });
+  const isAddMode = mode === "add";
+  const isPending = isActionPending || isTransitionPending;
+  const disableFormInputs = isAddMode && isPending;
   const availableGroups = form.course ? groupsByCourse[form.course] ?? [] : [];
 
-  useEffect(() => {
-    if (isOpen) {
-      setForm(initialData);
-    } else {
-      setForm(EMPTY_FORM);
-    }
-  }, [isOpen, initialData]);
+  const handleGroupChange = (nextGroupId: string) => {
+    const selectedGroup = availableGroups.find((group) => group.id === nextGroupId);
+
+    setForm((prev) => ({
+      ...prev,
+      groupId: nextGroupId,
+      groupName: selectedGroup?.name ?? "",
+    }));
+  };
+
+  const handleGenderChange = (nextGender: StudentFormData["gender"]) => {
+    setForm((prev) => ({
+      ...prev,
+      gender: nextGender,
+    }));
+  };
+
+  const handleStatusChange = (nextStatus: StudentFormStatus) => {
+    setForm((prev) => ({
+      ...prev,
+      status: nextStatus,
+    }));
+  };
+
+  const handleTestingScoreChange = (nextScore: string) => {
+    setForm((prev) => ({
+      ...prev,
+      testingScore: nextScore,
+    }));
+  };
+
+  const handleInternalNotesChange = (nextNotes: string) => {
+    setForm((prev) => ({
+      ...prev,
+      notes: nextNotes,
+    }));
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    formData.set("group_id", form.groupId);
+    formData.set("gender", form.gender);
+    formData.set("status", form.status);
+    formData.set("testingScore", form.testingScore);
+    formData.set("internalNotes", form.notes);
+
+    startTransition(() => {
+      submitAddStudent(formData);
+    });
+  };
 
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
@@ -70,23 +133,39 @@ export default function StudentSlideOver({
     }
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!actionState.message) {
+      return;
+    }
+
+    if (actionState.success) {
+      toast.success(actionState.message);
+      onClose();
+      return;
+    }
+
+    toast.error(`Error: ${actionState.message}`);
+  }, [actionState, onClose]);
+
   const panelTitle = useMemo(() => {
     if (mode === "edit") return "Edit Student";
     if (mode === "review") return "Review WhatsApp Lead";
     return "Add Student";
   }, [mode]);
 
-  const canSave =
+  const canSave = Boolean(
     form.firstName.trim() &&
     form.lastName.trim() &&
     form.phone.trim() &&
-    form.course.trim();
+    form.course.trim(),
+  );
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
+        type="button"
         className="absolute inset-0 bg-slate-900/30"
         onClick={onClose}
         aria-label="Close panel"
@@ -96,6 +175,7 @@ export default function StudentSlideOver({
         <header className="h-16 px-5 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-[18px] font-semibold text-slate-900">{panelTitle}</h2>
           <button
+            type="button"
             className="h-9 w-9 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300"
             onClick={onClose}
             aria-label="Close"
@@ -104,13 +184,16 @@ export default function StudentSlideOver({
           </button>
         </header>
 
+        <form onSubmit={isAddMode ? handleSubmit : undefined} className="flex flex-1 flex-col">
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="space-y-1.5">
               <span className="text-[12px] font-medium text-slate-600">First Name</span>
               <input
+                name="first_name"
                 value={form.firstName}
                 onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                disabled={disableFormInputs}
                 className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
               />
             </label>
@@ -118,8 +201,10 @@ export default function StudentSlideOver({
             <label className="space-y-1.5">
               <span className="text-[12px] font-medium text-slate-600">Last Name</span>
               <input
+                name="last_name"
                 value={form.lastName}
                 onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                disabled={disableFormInputs}
                 className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
               />
             </label>
@@ -128,8 +213,10 @@ export default function StudentSlideOver({
           <label className="space-y-1.5 block">
             <span className="text-[12px] font-medium text-slate-600">Phone Number</span>
             <input
+              name="phone"
               value={form.phone}
               onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              disabled={disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
             />
           </label>
@@ -137,14 +224,17 @@ export default function StudentSlideOver({
           <label className="space-y-1.5 block">
             <span className="text-[12px] font-medium text-slate-600">Course</span>
             <select
+              name="course"
               value={form.course}
               onChange={(e) =>
                 setForm((prev) => ({
                   ...prev,
                   course: e.target.value,
+                  groupId: "",
                   groupName: "",
                 }))
               }
+              disabled={disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 bg-white"
             >
               <option value="">Select course</option>
@@ -159,15 +249,16 @@ export default function StudentSlideOver({
           <label className="space-y-1.5 block">
             <span className="text-[12px] font-medium text-slate-600">Group</span>
             <select
-              value={form.groupName}
-              onChange={(e) => setForm((prev) => ({ ...prev, groupName: e.target.value }))}
-              disabled={!form.course}
+              name="group_id"
+              value={form.groupId}
+              onChange={(e) => handleGroupChange(e.target.value)}
+              disabled={!form.course || disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 bg-white disabled:bg-slate-100 disabled:text-slate-400"
             >
               <option value="">Unassigned</option>
               {availableGroups.map((group) => (
-                <option key={group} value={group}>
-                  {group}
+                <option key={group.id} value={group.id}>
+                  {group.name}
                 </option>
               ))}
             </select>
@@ -176,13 +267,10 @@ export default function StudentSlideOver({
           <label className="space-y-1.5 block">
             <span className="text-[12px] font-medium text-slate-600">Gender</span>
             <select
+              name="gender"
               value={form.gender}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  gender: e.target.value as "male" | "female" | "other",
-                }))
-              }
+              onChange={(e) => handleGenderChange(e.target.value as StudentFormData["gender"])}
+              disabled={disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 bg-white"
             >
               <option value="male">Male</option>
@@ -196,9 +284,10 @@ export default function StudentSlideOver({
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
               <button
                 type="button"
-                onClick={() => setForm((prev) => ({ ...prev, status: "pending" }))}
+                onClick={() => handleStatusChange("evaluating")}
+                disabled={disableFormInputs}
                 className={`rounded-lg px-3 py-2 text-left transition-colors ${
-                  form.status === "pending"
+                  form.status === "evaluating" || form.status === "lead"
                     ? "bg-white border border-slate-300 text-slate-900"
                     : "border border-transparent text-slate-600 hover:text-slate-800"
                 }`}
@@ -209,9 +298,10 @@ export default function StudentSlideOver({
 
               <button
                 type="button"
-                onClick={() => setForm((prev) => ({ ...prev, status: "registered" }))}
+                onClick={() => handleStatusChange("active")}
+                disabled={disableFormInputs}
                 className={`rounded-lg px-3 py-2 text-left transition-colors ${
-                  form.status === "registered"
+                  form.status === "active"
                     ? "bg-white border border-slate-300 text-slate-900"
                     : "border border-transparent text-slate-600 hover:text-slate-800"
                 }`}
@@ -224,55 +314,78 @@ export default function StudentSlideOver({
 
           <label
             className={`space-y-1.5 block rounded-xl p-3 border ${
-              form.status === "pending"
+              form.status === "evaluating" || form.status === "lead"
                 ? "border-blue-200 bg-blue-50/60"
                 : "border-transparent"
             }`}
           >
             <span className="text-[12px] font-medium text-slate-600">Testing Score</span>
             <input
+              name="testingScore"
               type="number"
               min={0}
               max={100}
               value={form.testingScore}
-              onChange={(e) => setForm((prev) => ({ ...prev, testingScore: e.target.value }))}
+              onChange={(e) => handleTestingScoreChange(e.target.value)}
+              disabled={disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
               placeholder="0 - 100"
             />
-            {form.status === "pending" ? (
+            {form.status === "evaluating" || form.status === "lead" ? (
               <p className="text-[11px] text-blue-700">Helpful for evaluating pipeline recommendations.</p>
             ) : null}
           </label>
 
-          {mode === "edit" ? (
-            <label className="space-y-1.5 block">
-              <span className="text-[12px] font-medium text-slate-600">Internal Notes</span>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                rows={4}
-                className="w-full rounded-lg border border-white/50 bg-white/60 px-3 py-2 text-[13px] text-slate-900 shadow-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 resize-y"
-                placeholder="Log internal follow-up details for this student"
-              />
-            </label>
-          ) : null}
+          <label className="space-y-1.5 block">
+            <span className="text-[12px] font-medium text-slate-600">Internal Notes</span>
+            <textarea
+              name="internalNotes"
+              value={form.notes}
+              onChange={(e) => handleInternalNotesChange(e.target.value)}
+              disabled={disableFormInputs}
+              rows={4}
+              className="w-full rounded-lg border border-white/50 bg-white/60 px-3 py-2 text-[13px] text-slate-900 shadow-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 resize-y"
+              placeholder="Log internal follow-up details for this student"
+            />
+          </label>
+
         </div>
 
         <footer className="h-16 px-5 border-t border-slate-200 flex items-center justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="h-9 px-4 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-[13px] font-medium"
           >
             Cancel
           </button>
-          <button
-            onClick={() => onSave(form)}
-            disabled={!canSave}
-            className="h-9 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 text-[13px] font-semibold"
-          >
-            Save Student
-          </button>
+          {isAddMode ? (
+            <button
+              type="submit"
+              disabled={!canSave || isPending}
+              className="h-9 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 text-[13px] font-semibold inline-flex items-center gap-2"
+            >
+              {isPending ? (
+                <>
+                  <LoaderCircle size={14} className="animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Save Student"
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSave(form)}
+              disabled={!canSave}
+              className="h-9 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 text-[13px] font-semibold"
+            >
+              Save Student
+            </button>
+          )}
         </footer>
+        </form>
       </section>
     </div>
   );

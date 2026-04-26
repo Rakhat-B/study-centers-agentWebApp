@@ -7,11 +7,12 @@ import LeadsTable, { type WhatsAppLead } from "@/components/students/LeadsTable"
 import StudentSlideOver, { type StudentFormData } from "@/components/students/StudentSlideOver";
 import StudentTable from "../../../components/students/StudentTable";
 import { type Student } from "@/data/mock";
+import { Toaster } from "sonner";
 
 type TabId = "directory" | "evaluating" | "whatsappLeads";
 type PanelMode = "add" | "edit" | "review";
 export type DirectoryStudent = Student & { internalNotes: string };
-export type AvailableClassOption = { name: string; groups: string[] };
+export type AvailableClassOption = { name: string; groups: { id: string; name: string }[] };
 export type StudentsByStatus = {
   active: DirectoryStudent[];
   evaluating: DirectoryStudent[];
@@ -54,6 +55,7 @@ function toFormData(input: {
   name: string;
   phone: string;
   course: string;
+  groupId?: string;
   groupName?: string;
   gender?: "male" | "female" | "other";
   status?: Student["pipelineStatus"];
@@ -68,16 +70,22 @@ function toFormData(input: {
     lastName,
     phone: input.phone,
     course: input.course,
+    groupId: input.groupId ?? "",
     groupName: input.groupName ?? "",
     gender: input.gender ?? "other",
-    status: input.status === "active" ? "registered" : "pending",
+    status:
+      input.status === "active"
+        ? "active"
+        : input.status === "lead"
+          ? "lead"
+          : "evaluating",
     testingScore: input.testingScore !== undefined ? String(input.testingScore) : "",
     notes: input.notes ?? "",
   };
 }
 
 function formStatusToPipelineStatus(status: StudentFormData["status"]): Student["pipelineStatus"] {
-  return status === "registered" ? "active" : "evaluating";
+  return status;
 }
 
 function createStudentId() {
@@ -96,14 +104,19 @@ export default function StudentsDirectoryClient({
   const [activeTab, setActiveTab] = useState<TabId>("directory");
   const [query, setQuery] = useState("");
   const [directoryStudents, setDirectoryStudents] = useState<DirectoryStudent[]>(() =>
-    [...initialStudentsByStatus.active, ...initialStudentsByStatus.evaluating].map((student) => ({
-      ...student,
-      ...normalizeFreezeWindow(student),
-    })),
+    [...initialStudentsByStatus.active, ...initialStudentsByStatus.evaluating].map((student) => {
+      const normalizedFreeze = normalizeFreezeWindow(student);
+
+      return {
+        ...student,
+        ...normalizedFreeze,
+      };
+    }),
   );
   const [whatsAppLeads, setWhatsAppLeads] = useState<WhatsAppLead[]>(initialStudentsByStatus.leads);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>("add");
+  const [panelSessionKey, setPanelSessionKey] = useState(0);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [reviewingLeadId, setReviewingLeadId] = useState<string | null>(null);
   const [freezeStudentId, setFreezeStudentId] = useState<string | null>(null);
@@ -114,7 +127,10 @@ export default function StudentsDirectoryClient({
   const courses = useMemo(() => availableClasses.map((c) => c.name), [availableClasses]);
 
   const groupsByCourse = useMemo(
-    () => Object.fromEntries(availableClasses.map((item) => [item.name, item.groups])) as Record<string, string[]>,
+    () =>
+      Object.fromEntries(
+        availableClasses.map((item) => [item.name, item.groups]),
+      ) as Record<string, AvailableClassOption["groups"]>,
     [availableClasses],
   );
 
@@ -171,10 +187,15 @@ export default function StudentsDirectoryClient({
 
   const currentFormData = useMemo<StudentFormData>(() => {
     if (panelMode === "edit" && editingStudent) {
+      const matchingGroup = (groupsByCourse[editingStudent.course] ?? []).find(
+        (group) => group.name === editingStudent.groupName,
+      );
+
       return toFormData({
         name: editingStudent.name,
         phone: editingStudent.phone,
         course: editingStudent.course,
+        groupId: matchingGroup?.id,
         groupName: editingStudent.groupName,
         gender: editingStudent.gender,
         status: editingStudent.pipelineStatus,
@@ -200,15 +221,17 @@ export default function StudentsDirectoryClient({
       lastName: "",
       phone: "",
       course: courses[0] ?? "",
+      groupId: "",
       groupName: "",
       gender: "other",
-      status: "pending",
+      status: "evaluating",
       testingScore: "",
       notes: "",
     };
-  }, [panelMode, editingStudent, reviewingLead, courses]);
+  }, [panelMode, editingStudent, reviewingLead, courses, groupsByCourse]);
 
   const openAddPanel = () => {
+    setPanelSessionKey((value) => value + 1);
     setPanelMode("add");
     setEditingStudentId(null);
     setReviewingLeadId(null);
@@ -216,6 +239,7 @@ export default function StudentsDirectoryClient({
   };
 
   const openEditPanel = (studentId: string) => {
+    setPanelSessionKey((value) => value + 1);
     setPanelMode("edit");
     setEditingStudentId(studentId);
     setReviewingLeadId(null);
@@ -223,6 +247,7 @@ export default function StudentsDirectoryClient({
   };
 
   const openReviewPanel = (lead: WhatsAppLead) => {
+    setPanelSessionKey((value) => value + 1);
     setPanelMode("review");
     setReviewingLeadId(lead.id);
     setEditingStudentId(null);
@@ -355,6 +380,8 @@ export default function StudentsDirectoryClient({
 
   return (
     <AppShell>
+      <Toaster richColors position="top-right" />
+
       <div className="flex items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
@@ -443,6 +470,7 @@ export default function StudentsDirectoryClient({
       </div>
 
       <StudentSlideOver
+        key={panelSessionKey}
         isOpen={isPanelOpen}
         mode={panelMode}
         courses={courses}
