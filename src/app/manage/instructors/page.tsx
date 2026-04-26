@@ -1,122 +1,164 @@
-"use client";
-
 import AppShell from "@/components/AppShell";
-import { mockInstructors } from "@/data/mock";
-import { useDashboard } from "@/context/DashboardContext";
-import { Plus } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import { redirect } from "next/navigation";
+import { createClient } from "@/utils/supabase/server";
+import InstructorsDirectoryClient, {
+  type InstructorDirectoryItem,
+  type InstructorTeachingGroup,
+} from "./InstructorsDirectoryClient";
 
-function getInitials(name: string) {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  const first = parts[0]?.[0] ?? "";
-  const second = parts[1]?.[0] ?? "";
-  return `${first}${second}`.toUpperCase();
+type RecordLike = Record<string, unknown>;
+
+type RawGroupRow = RecordLike & {
+  group_students?: RecordLike[] | null;
+};
+
+type RawInstructorRow = RecordLike & {
+  groups?: RawGroupRow[] | null;
+};
+
+function readString(source: RecordLike, keys: string[], fallback = ""): string {
+  for (const key of keys) {
+    const value = source[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return fallback;
 }
 
-export default function InstructorsDirectoryPage() {
-  const { currentRole } = useDashboard();
-  const [clicked, setClicked] = useState(false);
+function readNumber(source: RecordLike, keys: string[], fallback = 0): number {
+  for (const key of keys) {
+    const value = source[key];
 
-  return (
-    <AppShell>
-      <div className="flex items-start justify-between gap-4 mb-8">
-        <div>
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+function readRelations(value: unknown): RecordLike[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter((item): item is RecordLike => Boolean(item) && typeof item === "object");
+  }
+
+  if (typeof value === "object") {
+    return [value as RecordLike];
+  }
+
+  return [];
+}
+
+function mapRawInstructors(rawInstructors: RawInstructorRow[]): InstructorDirectoryItem[] {
+  return rawInstructors.map((instructor, instructorIndex) => {
+    const rawGroups = readRelations(instructor.groups);
+
+    const groups: InstructorTeachingGroup[] = rawGroups.map((group, groupIndex) => {
+      const groupStudents = readRelations(group.group_students);
+      const enrolledFromJoinCount = groupStudents.length > 0
+        ? readNumber(groupStudents[0], ["count"], 0)
+        : 0;
+
+      const enrolledCount = readNumber(
+        group,
+        ["student_count", "students_count", "participants", "enrolled_count"],
+        enrolledFromJoinCount,
+      );
+      const capacity = readNumber(group, ["capacity", "max_capacity", "max_participants"], 0);
+      const fullnessPercent = capacity > 0 ? Math.min(100, Math.round((enrolledCount / capacity) * 100)) : 0;
+
+      return {
+        id: readString(group, ["id"], `group-${instructorIndex + 1}-${groupIndex + 1}`),
+        title: readString(group, ["name", "title"], `Group ${groupIndex + 1}`),
+        capacity,
+        enrolledCount,
+        fullnessPercent,
+      };
+    });
+
+    const scheduleSummary =
+      groups.length === 0
+        ? "No classes assigned yet"
+        : groups.length <= 2
+          ? groups.map((group) => group.title).join(" • ")
+          : `${groups[0].title} • ${groups[1].title} +${groups.length - 2} more`;
+
+    return {
+      id: readString(instructor, ["id"], `instructor-${instructorIndex + 1}`),
+      name: readString(instructor, ["full_name", "name"], "Unnamed Instructor"),
+      specialization: readString(instructor, ["subject", "specialization"], "General Studies"),
+      scheduleSummary,
+      payrollRateKztPerHour: readNumber(
+        instructor,
+        ["payroll_rate_kzt_per_hour", "hourly_rate_kzt", "payroll_rate"],
+        0,
+      ),
+      groups,
+    };
+  });
+}
+
+export default async function InstructorsDirectoryPage() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: rawInstructors, error } = await supabase
+    .from("instructors")
+    .select("*, groups(id, name, capacity, group_students(count))");
+
+  if (error) {
+    return (
+      <AppShell>
+        <div className="mb-8">
           <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
             Instructors
           </h1>
-          <p className="text-[12px] mt-1" style={{ color: "rgba(29,29,31,0.45)" }}>
+          <p className="mt-1 text-[12px]" style={{ color: "rgba(29,29,31,0.45)" }}>
             Specializations, schedules, and payroll rates
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setClicked(true);
-            setTimeout(() => setClicked(false), 1200);
-          }}
-          className="flex items-center gap-2.5 px-6 py-3 rounded-full font-semibold text-[14px] tracking-tight transition-all duration-200"
-          style={{
-            background: clicked
-              ? "linear-gradient(135deg, #005fc4 0%, #1f8ef4 100%)"
-              : "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
-            color: "white",
-            boxShadow: clicked ? "0 4px 12px rgba(0, 109, 224, 0.3)" : "0 8px 24px rgba(0, 109, 224, 0.38)",
-            transform: clicked ? "scale(0.97)" : "scale(1)",
-            border: "none",
-            cursor: "pointer",
-            letterSpacing: "-0.01em",
-          }}
-          onMouseEnter={(e) => {
-            if (!clicked) {
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 28px rgba(0, 109, 224, 0.48)";
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!clicked) {
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(0, 109, 224, 0.38)";
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-            }
-          }}
+        <div
+          className="glass-card flex items-start gap-3 rounded-2xl p-5"
+          style={{ border: "1px solid rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.08)" }}
         >
-          <Plus size={16} strokeWidth={2.2} />
-          + Add Instructor
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {mockInstructors.map((inst) => (
-          <div
-            key={inst.id}
-            className="glass-card p-5 flex flex-col gap-3 transition-all duration-200 hover:bg-white/5 hover:ring-1 hover:ring-white/25"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{
-                  background: "rgba(0, 113, 227, 0.12)",
-                  border: "1px solid rgba(0, 113, 227, 0.2)",
-                  color: "var(--accent)",
-                }}
-              >
-                <span className="text-[12px] font-bold tracking-tight">{getInitials(inst.name)}</span>
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-[15px] font-bold tracking-tight truncate" style={{ color: "var(--foreground)" }}>
-                  {inst.name}
-                </p>
-                <p className="text-[12px] mt-1 truncate" style={{ color: "rgba(29,29,31,0.55)" }}>
-                  {inst.specialization}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}>
-              <p className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.75)" }}>
-                Schedule
-              </p>
-              <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.55)" }}>
-                {inst.scheduleSummary}
-              </p>
-            </div>
-
-            {currentRole === "Director" ? (
-              <div className="rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}>
-                <p className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.75)" }}>
-                  Payroll Rate
-                </p>
-                <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.55)" }}>
-                  {inst.payrollRateKztPerHour.toLocaleString("ru-KZ")} KZT / hour
-                </p>
-              </div>
-            ) : null}
+          <AlertTriangle size={18} className="mt-0.5 text-red-700" />
+          <div>
+            <p className="text-[14px] font-semibold text-red-900">Could not load instructors</p>
+            <p className="mt-1 text-[12px] text-red-800/85">{error.message}</p>
           </div>
-        ))}
-      </div>
-    </AppShell>
-  );
+        </div>
+      </AppShell>
+    );
+  }
+
+  const instructors = mapRawInstructors((rawInstructors ?? []) as RawInstructorRow[]);
+
+  return <InstructorsDirectoryClient instructors={instructors} />;
 }

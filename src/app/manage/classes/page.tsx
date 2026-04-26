@@ -1,1075 +1,491 @@
-"use client";
-
 import AppShell from "@/components/AppShell";
-import {
-  CLASSES_DATA,
-  INSTRUCTORS_DATA,
-  ROOMS_DATA,
-  mockStudentsDirectory,
-  type ClassCatalogCourse,
-  type ClassCatalogGroup,
-  type GroupSchedule,
-} from "@/data/mock";
-import { AlertTriangle, MapPin, MessageCircle, PencilLine, Plus, User, X } from "lucide-react";
+import { createClient } from "@/utils/supabase/server";
+import { AlertTriangle, BookOpen, Clock3, MapPin, UserRound, Users } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { redirect } from "next/navigation";
 
-type GroupEditorMode = "create" | "edit";
+type RecordLike = Record<string, unknown>;
 
-type GroupEditorState = {
-  isOpen: boolean;
-  mode: GroupEditorMode;
-  sourceCourseId: string;
-  sourceGroupId: string | null;
+type RawGroupRow = RecordLike & {
+  rooms?: RecordLike | RecordLike[] | null;
+  instructors?: RecordLike | RecordLike[] | null;
+  schedule_days?: unknown;
+  group_students?: RecordLike[] | null;
 };
 
-type GroupEditorForm = {
-  courseId: string;
-  name: string;
-  roomId: string;
-  instructorId: string;
+type RawCourseRow = RecordLike & {
+  groups?: RawGroupRow[] | null;
+};
+
+type UiGroup = {
+  key: string;
+  title: string;
+  teacherName: string;
+  room: string;
+  days: string[];
+  startTime: string;
+  endTime: string;
+  scheduleSummary: string;
+  enrolled: number;
   capacity: number;
-  studentIds: string[];
-  schedule: GroupSchedule;
+  usage: number;
 };
 
-const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const deepCopyCourses = (): ClassCatalogCourse[] =>
-  CLASSES_DATA.map((course) => ({
-    ...course,
-    groups: course.groups.map((group) => ({
-      ...group,
-      studentIds: [...group.studentIds],
-      schedule: {
-        days: [...group.schedule.days],
-        start: group.schedule.start,
-        end: group.schedule.end,
-      },
-    })),
-  }));
-
-const initialEditorState: GroupEditorState = {
-  isOpen: false,
-  mode: "create",
-  sourceCourseId: "",
-  sourceGroupId: null,
+type UiCourse = {
+  key: string;
+  title: string;
+  groups: UiGroup[];
 };
 
-function toMinutes(value: string): number {
-  const [hours, minutes] = value.split(":").map(Number);
-  return (hours || 0) * 60 + (minutes || 0);
-}
+function readString(source: RecordLike, keys: string[], fallback: string): string {
+  for (const key of keys) {
+    const value = source[key];
 
-function formatSchedule(schedule: GroupSchedule): string {
-  return `${schedule.days.join(", ")} • ${schedule.start} - ${schedule.end}`;
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-function scheduleOverlap(a: GroupSchedule, b: GroupSchedule): boolean {
-  const hasSharedDay = a.days.some((day) => b.days.includes(day));
-  if (!hasSharedDay) return false;
-
-  return toMinutes(a.start) < toMinutes(b.end) && toMinutes(a.end) > toMinutes(b.start);
-}
-
-function capacityTheme(currentStudents: number, maxCapacity: number) {
-  if (maxCapacity === 0) {
-    return {
-      progress: 0,
-      barColor: "#22c55e",
-      labelColor: "rgba(21, 128, 61, 0.95)",
-      badgeBg: "rgba(34, 197, 94, 0.14)",
-      badgeBorder: "rgba(34, 197, 94, 0.24)",
-    };
-  }
-
-  const progress = Math.min(100, Math.round((currentStudents / maxCapacity) * 100));
-
-  if (currentStudents >= maxCapacity) {
-    return {
-      progress,
-      barColor: "#ef4444",
-      labelColor: "rgba(185, 28, 28, 0.95)",
-      badgeBg: "rgba(239, 68, 68, 0.14)",
-      badgeBorder: "rgba(239, 68, 68, 0.24)",
-    };
-  }
-
-  if (currentStudents / maxCapacity >= 0.8) {
-    return {
-      progress,
-      barColor: "#f59e0b",
-      labelColor: "rgba(161, 98, 7, 0.95)",
-      badgeBg: "rgba(245, 158, 11, 0.14)",
-      badgeBorder: "rgba(245, 158, 11, 0.24)",
-    };
-  }
-
-  return {
-    progress,
-    barColor: "#22c55e",
-    labelColor: "rgba(21, 128, 61, 0.95)",
-    badgeBg: "rgba(34, 197, 94, 0.14)",
-    badgeBorder: "rgba(34, 197, 94, 0.24)",
-  };
-}
-
-function isInSession(schedule: GroupSchedule, now: Date): boolean {
-  const dayAbbrev = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][now.getDay()];
-  if (!schedule.days.includes(dayAbbrev)) {
-    return false;
-  }
-
-  const currentMin = now.getHours() * 60 + now.getMinutes();
-  const start = toMinutes(schedule.start);
-  const end = toMinutes(schedule.end);
-  return currentMin >= start && currentMin < end;
-}
-
-function buildEmptyGroupForm(courseId: string): GroupEditorForm {
-  return {
-    courseId,
-    name: "",
-    roomId: ROOMS_DATA[0]?.id ?? "",
-    instructorId: INSTRUCTORS_DATA[0]?.id ?? "",
-    capacity: 15,
-    studentIds: [],
-    schedule: {
-      days: ["Mon", "Wed", "Fri"],
-      start: "15:00",
-      end: "16:30",
-    },
-  };
-}
-
-export default function ClassesDirectoryPage() {
-  const [coursesState, setCoursesState] = useState<ClassCatalogCourse[]>(deepCopyCourses);
-  const [now, setNow] = useState(new Date());
-
-  const [isAddCourseOpen, setIsAddCourseOpen] = useState(false);
-  const [newCourseName, setNewCourseName] = useState("");
-  const [addCourseError, setAddCourseError] = useState<string | null>(null);
-
-  const [groupEditor, setGroupEditor] = useState<GroupEditorState>(initialEditorState);
-  const [groupForm, setGroupForm] = useState<GroupEditorForm>(buildEmptyGroupForm(CLASSES_DATA[0]?.id ?? ""));
-  const [groupFormError, setGroupFormError] = useState<string | null>(null);
-  const [studentSearch, setStudentSearch] = useState("");
-
-  const activeStudents = useMemo(
-    () => mockStudentsDirectory.filter((student) => student.pipelineStatus === "active"),
-    [],
-  );
-
-  const studentsById = useMemo(
-    () => Object.fromEntries(mockStudentsDirectory.map((student) => [student.id, student])) as Record<string, (typeof mockStudentsDirectory)[number]>,
-    [],
-  );
-
-  const roomsById = useMemo(
-    () => Object.fromEntries(ROOMS_DATA.map((room) => [room.id, room])) as Record<string, (typeof ROOMS_DATA)[number]>,
-    [],
-  );
-
-  const instructorsById = useMemo(
-    () =>
-      Object.fromEntries(INSTRUCTORS_DATA.map((instructor) => [instructor.id, instructor])) as Record<
-        string,
-        (typeof INSTRUCTORS_DATA)[number]
-      >,
-    [],
-  );
-
-  const flatGroups = useMemo(
-    () =>
-      coursesState.flatMap((course) =>
-        course.groups.map((group) => ({
-          ...group,
-          courseId: course.id,
-          courseName: course.courseName,
-        })),
-      ),
-    [coursesState],
-  );
-
-  const isRoomAvailable = (
-    roomId: string,
-    schedule: GroupSchedule,
-    excludeGroupId?: string,
-  ): { available: boolean; conflictingGroupName?: string } => {
-    for (const group of flatGroups) {
-      if (group.id === excludeGroupId) continue;
-      if (group.roomId !== roomId) continue;
-      if (!scheduleOverlap(schedule, group.schedule)) continue;
-
-      return { available: false, conflictingGroupName: group.name };
+    if (typeof value === "string" && value.trim()) {
+      return value;
     }
 
-    return { available: true };
-  };
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
 
-  const roomConflict = (() => {
-    if (!groupEditor.isOpen) return null;
-    if (!groupForm.roomId || groupForm.schedule.days.length === 0) return null;
-    if (toMinutes(groupForm.schedule.end) <= toMinutes(groupForm.schedule.start)) return null;
+  return fallback;
+}
 
-    const result = isRoomAvailable(groupForm.roomId, groupForm.schedule, groupEditor.sourceGroupId ?? undefined);
-    if (result.available) return null;
+function readNumber(source: RecordLike, keys: string[], fallback: number): number {
+  for (const key of keys) {
+    const value = source[key];
 
-    return `⚠️ Room Conflict: This room is already booked for ${result.conflictingGroupName}.`;
-  })();
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
 
-  const filteredActiveStudents = useMemo(() => {
-    const query = studentSearch.trim().toLowerCase();
-    return activeStudents.filter((student) => {
-      if (!query) return true;
-      return student.name.toLowerCase().includes(query) || student.phone.toLowerCase().includes(query);
-    });
-  }, [activeStudents, studentSearch]);
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 30000);
+  return fallback;
+}
 
-    return () => clearInterval(interval);
-  }, []);
+function readRelation(value: unknown): RecordLike | null {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return first && typeof first === "object" ? (first as RecordLike) : null;
+  }
 
-  const openAddGroup = (courseId: string) => {
-    setGroupEditor({
-      isOpen: true,
-      mode: "create",
-      sourceCourseId: courseId,
-      sourceGroupId: null,
-    });
-    setGroupForm(buildEmptyGroupForm(courseId));
-    setGroupFormError(null);
-    setStudentSearch("");
-  };
+  return typeof value === "object" ? (value as RecordLike) : null;
+}
 
-  const openEditGroup = (courseId: string, group: ClassCatalogGroup) => {
-    setGroupEditor({
-      isOpen: true,
-      mode: "edit",
-      sourceCourseId: courseId,
-      sourceGroupId: group.id,
-    });
-    setGroupForm({
-      courseId,
-      name: group.name,
-      roomId: group.roomId,
-      instructorId: group.instructorId,
-      capacity: group.capacity,
-      studentIds: [...group.studentIds],
-      schedule: {
-        days: [...group.schedule.days],
-        start: group.schedule.start,
-        end: group.schedule.end,
-      },
-    });
-    setGroupFormError(null);
-    setStudentSearch("");
-  };
+function mapScheduleDayNumberToLabel(dayNumber: number): string | null {
+  if (!Number.isInteger(dayNumber)) {
+    return null;
+  }
 
-  const closeGroupEditor = () => {
-    setGroupEditor(initialEditorState);
-    setGroupFormError(null);
-    setStudentSearch("");
-  };
+  // Supports both 1..7 (Mon..Sun) and 0..6 (Sun..Sat) storage formats.
+  if (dayNumber >= 1 && dayNumber <= 7) {
+    return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dayNumber - 1];
+  }
 
-  const toggleDay = (day: string) => {
-    setGroupForm((prev) => {
-      const exists = prev.schedule.days.includes(day);
+  if (dayNumber >= 0 && dayNumber <= 6) {
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dayNumber];
+  }
+
+  return null;
+}
+
+function readScheduleDays(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    const dayLabels = value
+      .map((item) => {
+        if (typeof item === "number") {
+          return mapScheduleDayNumberToLabel(item);
+        }
+
+        if (typeof item === "string") {
+          const trimmed = item.trim();
+          if (!trimmed) {
+            return null;
+          }
+
+          const asNumber = Number(trimmed);
+          if (Number.isFinite(asNumber)) {
+            return mapScheduleDayNumberToLabel(asNumber);
+          }
+
+          return trimmed;
+        }
+
+        return null;
+      })
+      .filter((item): item is string => Boolean(item));
+
+    return Array.from(new Set(dayLabels));
+  }
+
+  if (typeof value === "string") {
+    const dayLabels = value
+      .split(",")
+      .map((item) => item.trim())
+      .map((item) => {
+        const asNumber = Number(item);
+        if (Number.isFinite(asNumber)) {
+          return mapScheduleDayNumberToLabel(asNumber);
+        }
+
+        return item || null;
+      })
+      .filter((item): item is string => Boolean(item));
+
+    return Array.from(new Set(dayLabels));
+  }
+
+  return [];
+}
+
+function buildScheduleLabel(group: UiGroup): string {
+  const explicitSummary = group.scheduleSummary;
+  if (explicitSummary) {
+    return explicitSummary;
+  }
+
+  const days = group.days;
+  const start = group.startTime;
+  const end = group.endTime;
+
+  const dayLabel = days.join(", ");
+
+  if (dayLabel && start && end) {
+    return `${dayLabel} • ${start} - ${end}`;
+  }
+
+  if (start && end) {
+    return `${start} - ${end}`;
+  }
+
+  if (dayLabel) {
+    return dayLabel;
+  }
+
+  return "Schedule not set";
+}
+
+function mapRawCoursesToUi(rawCourses: RawCourseRow[]): UiCourse[] {
+  return rawCourses.map((course, courseIndex) => {
+    const courseKey = readString(course, ["id"], `course-${courseIndex + 1}`);
+    const rawGroups = Array.isArray(course.groups) ? course.groups : [];
+
+    const groups: UiGroup[] = rawGroups.map((group, groupIndex) => {
+      const room = readRelation(group.rooms);
+      const instructor = readRelation(group.instructors);
+      const groupStudentCountRelation = Array.isArray(group.group_students)
+        ? group.group_students[0]
+        : null;
+      const groupStudentCount =
+        groupStudentCountRelation && typeof groupStudentCountRelation === "object"
+          ? readNumber(groupStudentCountRelation as RecordLike, ["count"], 0)
+          : 0;
+
+      const enrolled = readNumber(
+        group,
+        ["student_count", "students_count", "participants", "enrolled_count"],
+        groupStudentCount,
+      );
+      const capacity = readNumber(group, ["capacity", "max_capacity", "max_participants"], 0);
+      const usage = capacity > 0 ? Math.min(100, Math.round((enrolled / capacity) * 100)) : 0;
+
       return {
-        ...prev,
-        schedule: {
-          ...prev.schedule,
-          days: exists
-            ? prev.schedule.days.filter((item) => item !== day)
-            : [...prev.schedule.days, day],
-        },
+        key: readString(group, ["id"], `${courseKey}-group-${groupIndex + 1}`),
+        // Bridge DB snake_case to UI props.
+        title: readString(group, ["name", "group_name", "title"], `Group ${groupIndex + 1}`),
+        teacherName: instructor
+          ? readString(instructor, ["full_name", "name"], "Instructor not set")
+          : readString(group, ["instructor_name", "teacher_name"], "Instructor not set"),
+        room: room
+          ? readString(room, ["name", "room_name", "title"], "Room not set")
+          : readString(group, ["room_name"], "Room not set"),
+        days: readScheduleDays(group.schedule_days ?? group.days ?? group.week_days),
+        startTime: readString(group, ["start_time", "start", "starts_at"], ""),
+        endTime: readString(group, ["end_time", "end", "ends_at"], ""),
+        scheduleSummary: readString(group, ["schedule_summary"], ""),
+        enrolled,
+        capacity,
+        usage,
       };
     });
-  };
 
-  const toggleStudent = (studentId: string) => {
-    setGroupForm((prev) => {
-      const exists = prev.studentIds.includes(studentId);
-      return {
-        ...prev,
-        studentIds: exists
-          ? prev.studentIds.filter((id) => id !== studentId)
-          : [...prev.studentIds, studentId],
-      };
-    });
-  };
-
-  const handleAddCourse = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const courseName = newCourseName.trim();
-    if (!courseName) {
-      setAddCourseError("Course name is required.");
-      return;
-    }
-
-    const duplicate = coursesState.some(
-      (course) => course.courseName.toLowerCase() === courseName.toLowerCase(),
-    );
-    if (duplicate) {
-      setAddCourseError("This course already exists.");
-      return;
-    }
-
-    setCoursesState((prev) => [
-      ...prev,
-      {
-        id: `course-${slugify(courseName)}-${Date.now()}`,
-        courseName,
-        groups: [],
-      },
-    ]);
-
-    setNewCourseName("");
-    setAddCourseError(null);
-    setIsAddCourseOpen(false);
-  };
-
-  const handleSaveGroup = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!groupForm.courseId || !groupForm.name.trim()) {
-      setGroupFormError("Course and group name are required.");
-      return;
-    }
-
-    if (!groupForm.roomId || !groupForm.instructorId) {
-      setGroupFormError("Please select both a classroom and instructor.");
-      return;
-    }
-
-    if (groupForm.schedule.days.length === 0) {
-      setGroupFormError("Select at least one day in the schedule.");
-      return;
-    }
-
-    if (toMinutes(groupForm.schedule.end) <= toMinutes(groupForm.schedule.start)) {
-      setGroupFormError("End time must be later than start time.");
-      return;
-    }
-
-    if (groupForm.capacity <= 0 || groupForm.studentIds.length > groupForm.capacity) {
-      setGroupFormError("Capacity must be positive and not smaller than assigned students.");
-      return;
-    }
-
-    if (roomConflict) {
-      setGroupFormError("Resolve the room conflict before saving.");
-      return;
-    }
-
-    const groupId =
-      groupEditor.mode === "edit" && groupEditor.sourceGroupId
-        ? groupEditor.sourceGroupId
-        : `${slugify(groupForm.courseId)}-${slugify(groupForm.name)}-${Date.now()}`;
-
-    const nextGroup: ClassCatalogGroup = {
-      id: groupId,
-      name: groupForm.name.trim(),
-      roomId: groupForm.roomId,
-      instructorId: groupForm.instructorId,
-      capacity: groupForm.capacity,
-      studentIds: [...groupForm.studentIds],
-      schedule: {
-        days: [...groupForm.schedule.days],
-        start: groupForm.schedule.start,
-        end: groupForm.schedule.end,
-      },
+    return {
+      key: courseKey,
+      // Bridge DB snake_case to UI props.
+      title: readString(course, ["name", "course_name", "title"], "Untitled Course"),
+      groups,
     };
+  });
+}
 
-    setCoursesState((prev) => {
-      const withoutOldGroup = prev.map((course) => ({
-        ...course,
-        groups: course.groups.filter((group) => group.id !== groupId),
-      }));
+export default async function ClassesDirectoryPage() {
+  const supabase = await createClient();
 
-      return withoutOldGroup.map((course) => {
-        if (course.id !== groupForm.courseId) return course;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-        return {
-          ...course,
-          groups: [...course.groups, nextGroup],
-        };
-      });
-    });
+  if (!user) {
+    redirect("/login");
+  }
 
-    closeGroupEditor();
-  };
+  const { data: rawCourses, error } = await supabase
+    .from("courses")
+    .select("*, groups(*, rooms(*), instructors(*), group_students(count))");
 
-  const removeGroup = (groupId: string) => {
-    setCoursesState((prev) =>
-      prev.map((course) => ({
-        ...course,
-        groups: course.groups.filter((group) => group.id !== groupId),
-      })),
+  console.log("SUPABASE DATA:", JSON.stringify(rawCourses, null, 2));
+  console.log("SUPABASE ERROR:", error);
+
+  if (error) {
+    return (
+      <AppShell>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
+              Classes
+            </h1>
+          </div>
+        </div>
+
+        <div
+          className="glass-card flex items-start gap-3 rounded-2xl p-5"
+          style={{ border: "1px solid rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.08)" }}
+        >
+          <AlertTriangle size={18} className="mt-0.5 text-red-700" />
+          <div>
+            <p className="text-[14px] font-semibold text-red-900">Could not load classes</p>
+            <p className="mt-1 text-[12px] text-red-800/85">{error.message}</p>
+          </div>
+        </div>
+      </AppShell>
     );
-  };
+  }
+
+  if (!rawCourses || rawCourses.length === 0) {
+    return (
+      <AppShell>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
+              Classes
+            </h1>
+            <p className="mt-1 text-[12px]" style={{ color: "rgba(29,29,31,0.48)" }}>
+              Live data from Supabase (0 courses)
+            </p>
+          </div>
+
+          <span
+            className="live-glow rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+            style={{
+              background: "rgba(52, 199, 89, 0.14)",
+              border: "1px solid rgba(52, 199, 89, 0.3)",
+              color: "rgba(20, 83, 45, 0.92)",
+            }}
+          >
+            Live
+          </span>
+        </div>
+
+        <div className="glass-card rounded-2xl p-8 text-center">
+          <BookOpen size={26} className="mx-auto mb-3 text-[rgba(29,29,31,0.45)]" />
+          <p className="text-[18px] font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
+            No classes found for this center
+          </p>
+          <p className="mx-auto mt-2 max-w-lg text-[13px]" style={{ color: "rgba(29,29,31,0.58)" }}>
+            Once courses and groups are created in Supabase, they will appear here automatically.
+          </p>
+          <Link
+            href="/manage/students"
+            className="mt-5 inline-flex rounded-full px-4 py-2 text-[12px] font-semibold"
+            style={{
+              textDecoration: "none",
+              color: "var(--accent)",
+              background: "rgba(0, 113, 227, 0.12)",
+              border: "1px solid rgba(0, 113, 227, 0.22)",
+            }}
+          >
+            Go to Students
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const courses = mapRawCoursesToUi(rawCourses as RawCourseRow[]);
+
+  if (courses.length === 0) {
+    return (
+      <AppShell>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
+              Classes
+            </h1>
+            <p className="mt-1 text-[12px]" style={{ color: "rgba(29,29,31,0.48)" }}>
+              Live data from Supabase (0 courses)
+            </p>
+          </div>
+
+          <span
+            className="live-glow rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+            style={{
+              background: "rgba(52, 199, 89, 0.14)",
+              border: "1px solid rgba(52, 199, 89, 0.3)",
+              color: "rgba(20, 83, 45, 0.92)",
+            }}
+          >
+            Live
+          </span>
+        </div>
+
+        <div className="glass-card rounded-2xl p-8 text-center">
+          <BookOpen size={26} className="mx-auto mb-3 text-[rgba(29,29,31,0.45)]" />
+          <p className="text-[18px] font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
+            No classes found for this center
+          </p>
+          <p className="mx-auto mt-2 max-w-lg text-[13px]" style={{ color: "rgba(29,29,31,0.58)" }}>
+            Once courses and groups are created in Supabase, they will appear here automatically.
+          </p>
+          <Link
+            href="/manage/students"
+            className="mt-5 inline-flex rounded-full px-4 py-2 text-[12px] font-semibold"
+            style={{
+              textDecoration: "none",
+              color: "var(--accent)",
+              background: "rgba(0, 113, 227, 0.12)",
+              border: "1px solid rgba(0, 113, 227, 0.22)",
+            }}
+          >
+            Go to Students
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
-      <div className="flex items-start justify-between gap-4 mb-8">
+      <div className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
             Classes
           </h1>
-          <p className="text-[12px] mt-1" style={{ color: "rgba(29,29,31,0.45)" }}>
-            Courses, groups, rooms, and live session status
+          <p className="mt-1 text-[12px]" style={{ color: "rgba(29,29,31,0.48)" }}>
+            Live data from Supabase ({courses.length} course{courses.length === 1 ? "" : "s"})
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setIsAddCourseOpen(true);
-            setAddCourseError(null);
-            setNewCourseName("");
-          }}
-          className="flex items-center gap-2.5 px-6 py-3 rounded-full font-semibold text-[14px] tracking-tight transition-all duration-200"
+        <span
+          className="live-glow rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
           style={{
-            background: "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
-            color: "white",
-            boxShadow: "0 8px 24px rgba(0, 109, 224, 0.38)",
-            border: "none",
-            cursor: "pointer",
-            letterSpacing: "-0.01em",
+            background: "rgba(52, 199, 89, 0.14)",
+            border: "1px solid rgba(52, 199, 89, 0.3)",
+            color: "rgba(20, 83, 45, 0.92)",
           }}
         >
-          <Plus size={16} strokeWidth={2.2} />
-          Add Course
-        </button>
+          Live
+        </span>
       </div>
 
-      <div className="space-y-9">
-        {coursesState.map((course) => (
-          <section key={course.id} className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[20px] md:text-[22px] font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
-                {course.courseName}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {courses.map((course) => (
+          <section key={course.key} className="glass-card rounded-2xl p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <h2 className="text-[20px] font-semibold leading-none tracking-tight" style={{ color: "var(--foreground)" }}>
+                {course.title}
               </h2>
               <span
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                 style={{
-                  color: "rgba(29,29,31,0.62)",
-                  background: "rgba(255,255,255,0.45)",
-                  border: "1px solid rgba(255,255,255,0.62)",
+                  background: "rgba(255,255,255,0.38)",
+                  border: "1px solid rgba(255,255,255,0.45)",
+                  color: "rgba(29,29,31,0.6)",
                 }}
               >
-                {course.groups.length} groups
+                {course.groups.length} group{course.groups.length === 1 ? "" : "s"}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {course.groups.map((group) => {
-                const roomName = roomsById[group.roomId]?.name ?? "Unknown Room";
-                const instructor = instructorsById[group.instructorId];
-                const enrolled = group.studentIds.length;
-                const capacity = capacityTheme(enrolled, group.capacity);
-                const inSession = isInSession(group.schedule, now);
-
-                const phones = group.studentIds
-                  .map((id) => studentsById[id]?.phone)
-                  .filter((value): value is string => Boolean(value));
-
-                const waText = `Group ${group.name} (${course.courseName}) phones: ${phones.join(", ") || "No students assigned"}`;
-                const waLink = `https://wa.me/?text=${encodeURIComponent(waText)}`;
-
-                return (
+            {course.groups.length === 0 ? (
+              <div
+                className="rounded-2xl border border-dashed p-4 text-[12px]"
+                style={{ color: "rgba(29,29,31,0.58)", borderColor: "rgba(255,255,255,0.5)" }}
+              >
+                No groups available for this course.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {course.groups.map((group) => (
                   <article
-                    key={group.id}
-                    className="glass-card p-4 md:p-5 flex flex-col gap-4 transition-transform duration-200 hover:-translate-y-1 hover:shadow-md"
-                    style={{
-                      background: "linear-gradient(165deg, rgba(255,255,255,0.35), rgba(255,255,255,0.18))",
-                      border: "1px solid rgba(255, 255, 255, 0.55)",
-                    }}
+                    key={group.key}
+                    className="rounded-2xl border border-white/40 bg-white/28 p-4"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[16px] font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
-                          {group.name}
-                        </p>
-                        <div
-                          className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                          style={{
-                            color: "rgba(29,29,31,0.68)",
-                            background: "rgba(255,255,255,0.5)",
-                            border: "1px solid rgba(255,255,255,0.65)",
-                          }}
-                        >
-                          <MapPin size={13} />
-                          {roomName}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => openEditGroup(course.id, group)}
-                        className="h-8 w-8 rounded-full inline-flex items-center justify-center"
-                        style={{
-                          background: "rgba(255,255,255,0.45)",
-                          border: "1px solid rgba(255,255,255,0.6)",
-                          color: "rgba(29,29,31,0.72)",
-                        }}
-                        aria-label={`Edit ${group.name}`}
-                      >
-                        <PencilLine size={15} />
-                      </button>
-                    </div>
-
-                    {inSession ? (
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-[15px] font-semibold tracking-tight" style={{ color: "var(--foreground)" }}>
+                        {group.title}
+                      </h3>
                       <span
-                        className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold w-fit"
+                        className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                         style={{
-                          color: "rgba(22, 101, 52, 0.95)",
-                          background: "rgba(34, 197, 94, 0.15)",
-                          border: "1px solid rgba(34, 197, 94, 0.28)",
+                          background: "rgba(0, 113, 227, 0.12)",
+                          color: "var(--accent)",
+                          border: "1px solid rgba(0, 113, 227, 0.2)",
                         }}
                       >
-                        <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                        In Session
+                        {group.usage}% full
                       </span>
-                    ) : null}
-
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                          Capacity
-                        </span>
-                        <span
-                          className="text-[11px] font-semibold px-2 py-1 rounded-full"
-                          style={{
-                            color: capacity.labelColor,
-                            background: capacity.badgeBg,
-                            border: `1px solid ${capacity.badgeBorder}`,
-                          }}
-                        >
-                          {enrolled}/{group.capacity}
-                        </span>
-                      </div>
-
-                      <div
-                        className="rounded-full overflow-hidden"
-                        style={{
-                          height: 5,
-                          background: "rgba(255,255,255,0.28)",
-                          border: "1px solid rgba(255,255,255,0.5)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            height: "100%",
-                            width: `${capacity.progress}%`,
-                            background: capacity.barColor,
-                          }}
-                        />
-                      </div>
                     </div>
 
-                    <Link
-                      href="/manage/timetable"
-                      className="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold w-fit transition-opacity hover:opacity-80"
-                      style={{
-                        color: "rgba(29,29,31,0.66)",
-                        background: "rgba(255,255,255,0.46)",
-                        border: "1px solid rgba(255,255,255,0.62)",
-                      }}
-                    >
-                      {formatSchedule(group.schedule)}
-                    </Link>
+                    <div className="mt-2 flex items-center gap-2 text-[12px]" style={{ color: "rgba(29,29,31,0.6)" }}>
+                      <Clock3 size={13} />
+                      {buildScheduleLabel(group)}
+                    </div>
 
-                    <Link
-                      href="/manage/instructors"
-                      className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold w-fit transition-opacity hover:opacity-80"
-                      style={{
-                        color: "rgba(29,29,31,0.72)",
-                        background: "rgba(255,255,255,0.5)",
-                        border: "1px solid rgba(255,255,255,0.65)",
-                      }}
-                    >
-                      <User size={14} />
-                      {instructor?.name ?? "Unassigned"}
-                    </Link>
+                    <div className="mt-3 grid grid-cols-1 gap-2 text-[12px] md:grid-cols-3">
+                      <p className="inline-flex items-center gap-2" style={{ color: "rgba(29,29,31,0.62)" }}>
+                        <MapPin size={13} /> {group.room}
+                      </p>
+                      <p className="inline-flex items-center gap-2" style={{ color: "rgba(29,29,31,0.62)" }}>
+                        <UserRound size={13} /> {group.teacherName}
+                      </p>
+                      <p className="inline-flex items-center gap-2" style={{ color: "rgba(29,29,31,0.62)" }}>
+                        <Users size={13} />
+                        {group.capacity > 0
+                          ? `${group.enrolled}/${group.capacity} students`
+                          : `${group.enrolled} students`}
+                      </p>
+                    </div>
 
-                    <div className="mt-auto flex gap-2">
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-semibold"
+                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/10">
+                      <div
+                        className="h-full rounded-full"
                         style={{
-                          color: "#0f5132",
-                          background: "rgba(34,197,94,0.14)",
-                          border: "1px solid rgba(34,197,94,0.24)",
+                          width: `${group.usage}%`,
+                          background:
+                            group.usage >= 100
+                              ? "#ef4444"
+                              : group.usage >= 80
+                                ? "#f59e0b"
+                                : "var(--accent)",
                         }}
-                      >
-                        <MessageCircle size={14} />
-                        Message Group
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => removeGroup(group.id)}
-                        className="px-3 py-1.5 rounded-full text-[12px] font-semibold"
-                        style={{
-                          color: "#b91c1c",
-                          background: "rgba(239,68,68,0.12)",
-                          border: "1px solid rgba(239,68,68,0.2)",
-                        }}
-                      >
-                        Archive
-                      </button>
+                      />
                     </div>
                   </article>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={() => openAddGroup(course.id)}
-                className="rounded-2xl p-5 border-2 border-dashed flex flex-col items-center justify-center gap-2 min-h-[220px] transition-all hover:-translate-y-1 hover:shadow-md"
-                style={{
-                  borderColor: "rgba(29,29,31,0.2)",
-                  color: "rgba(29,29,31,0.52)",
-                  background: "rgba(255,255,255,0.18)",
-                }}
-              >
-                <span
-                  className="h-12 w-12 rounded-full flex items-center justify-center"
-                  style={{
-                    background: "rgba(255,255,255,0.6)",
-                    border: "1px solid rgba(255,255,255,0.75)",
-                  }}
-                >
-                  <Plus size={24} />
-                </span>
-                <span className="text-[14px] font-semibold">Add New Group</span>
-              </button>
-            </div>
+                ))}
+              </div>
+            )}
           </section>
         ))}
-      </div>
-
-      <div
-        className={`fixed inset-0 z-50 transition-opacity duration-250 ${
-          isAddCourseOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <button
-          type="button"
-          className="absolute inset-0 bg-black/30"
-          aria-label="Close add course modal"
-          onClick={() => setIsAddCourseOpen(false)}
-        />
-
-        <div className="absolute inset-0 flex items-center justify-center p-4">
-          <form
-            onSubmit={handleAddCourse}
-            className="glass-card w-full max-w-[460px] p-5"
-            style={{
-              background: "linear-gradient(170deg, rgba(255,255,255,0.92), rgba(246,249,255,0.88))",
-              border: "1px solid rgba(255,255,255,0.9)",
-            }}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[12px] font-semibold uppercase tracking-[0.08em]" style={{ color: "rgba(29,29,31,0.52)" }}>
-                  Add Course
-                </p>
-                <h3 className="text-[22px] font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
-                  Create Course Category
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddCourseOpen(false)}
-                className="h-8 w-8 rounded-full inline-flex items-center justify-center"
-                style={{
-                  background: "rgba(29,29,31,0.06)",
-                  color: "rgba(29,29,31,0.62)",
-                }}
-                aria-label="Close"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <label className="block mt-4">
-              <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                Course Name
-              </span>
-              <input
-                value={newCourseName}
-                onChange={(event) => setNewCourseName(event.target.value)}
-                placeholder="SAT Prep"
-                className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-              />
-            </label>
-
-            {addCourseError ? (
-              <div
-                className="mt-3 rounded-xl px-3 py-2 text-[12px] font-medium flex items-start gap-2"
-                style={{
-                  color: "#b91c1c",
-                  background: "rgba(239,68,68,0.12)",
-                  border: "1px solid rgba(239,68,68,0.25)",
-                }}
-              >
-                <AlertTriangle size={15} className="shrink-0 mt-[1px]" />
-                <span>{addCourseError}</span>
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsAddCourseOpen(false)}
-                className="px-4 py-2 rounded-full text-[13px] font-semibold"
-                style={{
-                  color: "rgba(29,29,31,0.72)",
-                  background: "rgba(255,255,255,0.62)",
-                  border: "1px solid rgba(255,255,255,0.8)",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-full text-[13px] font-semibold"
-                style={{
-                  color: "white",
-                  background: "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
-                  border: "1px solid rgba(0,109,224,0.4)",
-                }}
-              >
-                Add Course
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <div
-        className={`fixed inset-0 z-50 transition-opacity duration-250 ${
-          groupEditor.isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <button
-          type="button"
-          className="absolute inset-0 bg-black/30"
-          aria-label="Close group management sheet"
-          onClick={closeGroupEditor}
-        />
-
-        <aside
-          className={`absolute right-0 top-0 h-full w-full max-w-[580px] p-4 md:p-6 transition-transform duration-300 ${
-            groupEditor.isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <form
-            onSubmit={handleSaveGroup}
-            className="h-full glass-card flex flex-col"
-            style={{
-              background: "linear-gradient(170deg, rgba(255,255,255,0.85), rgba(246,249,255,0.78))",
-              border: "1px solid rgba(255,255,255,0.9)",
-            }}
-          >
-            <div className="px-5 py-4 border-b" style={{ borderColor: "rgba(29,29,31,0.08)" }}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.08em]" style={{ color: "rgba(29,29,31,0.52)" }}>
-                    Group Management
-                  </p>
-                  <h3 className="text-[22px] font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
-                    {groupEditor.mode === "create" ? "Create New Group" : "Edit Group"}
-                  </h3>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={closeGroupEditor}
-                  className="h-8 w-8 rounded-full inline-flex items-center justify-center"
-                  style={{
-                    background: "rgba(29,29,31,0.06)",
-                    color: "rgba(29,29,31,0.62)",
-                  }}
-                  aria-label="Close"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-
-            <div className="px-5 py-4 flex-1 overflow-auto space-y-4">
-              <label className="block">
-                <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                  Course
-                </span>
-                <select
-                  value={groupForm.courseId}
-                  onChange={(event) => setGroupForm((prev) => ({ ...prev, courseId: event.target.value }))}
-                  className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                  style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                >
-                  {coursesState.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.courseName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                    Group Name
-                  </span>
-                  <input
-                    value={groupForm.name}
-                    onChange={(event) => setGroupForm((prev) => ({ ...prev, name: event.target.value }))}
-                    className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                    style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                    placeholder="Group A"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                    Capacity
-                  </span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={groupForm.capacity}
-                    onChange={(event) =>
-                      setGroupForm((prev) => ({ ...prev, capacity: Number(event.target.value) || 0 }))
-                    }
-                    className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                    style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                    Classroom
-                  </span>
-                  <select
-                    value={groupForm.roomId}
-                    onChange={(event) => setGroupForm((prev) => ({ ...prev, roomId: event.target.value }))}
-                    className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                    style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                  >
-                    {ROOMS_DATA.map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                    Instructor
-                  </span>
-                  <select
-                    value={groupForm.instructorId}
-                    onChange={(event) =>
-                      setGroupForm((prev) => ({ ...prev, instructorId: event.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                    style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                  >
-                    {INSTRUCTORS_DATA.map((instructor) => (
-                      <option key={instructor.id} value={instructor.id}>
-                        {instructor.name} ({instructor.subject})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div>
-                <p className="text-[12px] font-semibold mb-2" style={{ color: "rgba(29,29,31,0.62)" }}>
-                  Schedule Days
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {WEEK_DAYS.map((day) => {
-                    const active = groupForm.schedule.days.includes(day);
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => toggleDay(day)}
-                        className="px-3 py-1.5 rounded-full text-[12px] font-semibold"
-                        style={{
-                          color: active ? "white" : "rgba(29,29,31,0.66)",
-                          background: active ? "#0071e3" : "rgba(255,255,255,0.6)",
-                          border: active ? "1px solid #0071e3" : "1px solid rgba(255,255,255,0.75)",
-                        }}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                    Start Time
-                  </span>
-                  <input
-                    type="time"
-                    value={groupForm.schedule.start}
-                    onChange={(event) =>
-                      setGroupForm((prev) => ({
-                        ...prev,
-                        schedule: { ...prev.schedule, start: event.target.value },
-                      }))
-                    }
-                    className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                    style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                    End Time
-                  </span>
-                  <input
-                    type="time"
-                    value={groupForm.schedule.end}
-                    onChange={(event) =>
-                      setGroupForm((prev) => ({
-                        ...prev,
-                        schedule: { ...prev.schedule, end: event.target.value },
-                      }))
-                    }
-                    className="mt-1.5 w-full rounded-xl px-3 py-2 text-[13px]"
-                    style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                  />
-                </label>
-              </div>
-
-              <div>
-                <p className="text-[12px] font-semibold" style={{ color: "rgba(29,29,31,0.62)" }}>
-                  Active Student Roster
-                </p>
-                <input
-                  value={studentSearch}
-                  onChange={(event) => setStudentSearch(event.target.value)}
-                  placeholder="Search by name or phone"
-                  className="mt-1.5 mb-2 w-full rounded-xl px-3 py-2 text-[13px]"
-                  style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.8)" }}
-                />
-
-                <div
-                  className="rounded-xl p-2 max-h-[200px] overflow-auto space-y-1"
-                  style={{ background: "rgba(255,255,255,0.54)", border: "1px solid rgba(255,255,255,0.78)" }}
-                >
-                  {filteredActiveStudents.map((student) => {
-                    const selected = groupForm.studentIds.includes(student.id);
-                    return (
-                      <label
-                        key={student.id}
-                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg"
-                        style={{ background: selected ? "rgba(0,113,227,0.08)" : "transparent" }}
-                      >
-                        <span className="text-[12px]" style={{ color: "rgba(29,29,31,0.75)" }}>
-                          {student.name}
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleStudent(student.id)}
-                        />
-                      </label>
-                    );
-                  })}
-
-                  {!filteredActiveStudents.length ? (
-                    <p className="text-[12px] px-2 py-2" style={{ color: "rgba(29,29,31,0.58)" }}>
-                      No active students found.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              {roomConflict ? (
-                <div
-                  className="rounded-xl px-3 py-2 text-[12px] font-medium flex items-start gap-2"
-                  style={{
-                    color: "#b91c1c",
-                    background: "rgba(239,68,68,0.12)",
-                    border: "1px solid rgba(239,68,68,0.25)",
-                  }}
-                >
-                  <AlertTriangle size={15} className="shrink-0 mt-[1px]" />
-                  <span>{roomConflict}</span>
-                </div>
-              ) : null}
-
-              {groupFormError ? (
-                <div
-                  className="rounded-xl px-3 py-2 text-[12px] font-medium flex items-start gap-2"
-                  style={{
-                    color: "#b91c1c",
-                    background: "rgba(239,68,68,0.12)",
-                    border: "1px solid rgba(239,68,68,0.25)",
-                  }}
-                >
-                  <AlertTriangle size={15} className="shrink-0 mt-[1px]" />
-                  <span>{groupFormError}</span>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="px-5 py-4 border-t flex justify-end gap-2" style={{ borderColor: "rgba(29,29,31,0.08)" }}>
-              <button
-                type="button"
-                onClick={closeGroupEditor}
-                className="px-4 py-2 rounded-full text-[13px] font-semibold"
-                style={{
-                  color: "rgba(29,29,31,0.72)",
-                  background: "rgba(255,255,255,0.62)",
-                  border: "1px solid rgba(255,255,255,0.8)",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={Boolean(roomConflict)}
-                className="px-4 py-2 rounded-full text-[13px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  color: "white",
-                  background: "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
-                  border: "1px solid rgba(0,109,224,0.4)",
-                }}
-              >
-                Save
-              </button>
-            </div>
-          </form>
-        </aside>
       </div>
     </AppShell>
   );

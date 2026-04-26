@@ -2,21 +2,20 @@
 
 import { CalendarClock, MapPin, Clock3 } from "lucide-react";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
+import type { DashboardInstructorScheduleItem } from "@/app/dashboard/DashboardClient";
 
-const todaySchedule = [
-  { id: "is1", className: "IELTS Advanced", time: "10:00 - 11:30", room: "A-101" },
-  { id: "is2", className: "Grammar Workshop", time: "13:00 - 14:00", room: "B-204" },
-  { id: "is3", className: "Speaking Lab", time: "16:30 - 18:00", room: "A-103" },
-];
+type InstructorScheduleProps = {
+  schedule: DashboardInstructorScheduleItem[];
+};
 
-export default function InstructorSchedule() {
+export default function InstructorSchedule({ schedule }: InstructorScheduleProps) {
   return (
     <div className="glass-card p-5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
           <WidgetTitleLink href="#my-schedule" title="Instructor Schedule" />
           <p className="text-[12px] mt-0.5" style={{ color: "rgba(29,29,31,0.45)" }}>
-            3 classes planned for today
+            {schedule.length} classes planned for today
           </p>
         </div>
         <div
@@ -28,7 +27,12 @@ export default function InstructorSchedule() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {todaySchedule.map((item) => (
+        {schedule.length === 0 ? (
+          <p className="text-[12px]" style={{ color: "rgba(29,29,31,0.5)" }}>
+            No classes assigned for today.
+          </p>
+        ) : null}
+        {schedule.map((item) => (
           <div
             key={item.id}
             className="rounded-xl px-3 py-2.5 flex items-center justify-between"

@@ -39,7 +39,7 @@ type AccordionGroup = {
 };
 
 const rootNav: NavItem[] = [
-  { id: "dashboard", labelKey: "sidebar.dashboard", defaultLabel: "Dashboard", icon: BarChart2, href: "/" },
+  { id: "dashboard", labelKey: "sidebar.dashboard", defaultLabel: "Dashboard", icon: BarChart2, href: "/dashboard" },
   { id: "timetable", labelKey: "sidebar.timetable", defaultLabel: "Timetable", icon: Calendar, href: "/timetable" },
 ];
 

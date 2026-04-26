@@ -1,11 +1,23 @@
 "use client";
 
 import { BellRing, Link2 } from "lucide-react";
-import { formatKZT, mockPaymentAlerts } from "@/data/mock";
 import { t } from "@/lib/i18n";
 import WidgetTitleLink from "@/components/WidgetTitleLink";
+import type { DashboardPaymentAlert } from "@/app/dashboard/DashboardClient";
 
-export default function PaymentAlerts() {
+type PaymentAlertsProps = {
+  alerts: DashboardPaymentAlert[];
+};
+
+function formatKZT(amount: number): string {
+  return new Intl.NumberFormat("ru-KZ", {
+    style: "currency",
+    currency: "KZT",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export default function PaymentAlerts({ alerts }: PaymentAlertsProps) {
   return (
     <div className="glass-card p-5 flex flex-col gap-4 h-full">
       <div className="flex items-center justify-between">
@@ -19,7 +31,12 @@ export default function PaymentAlerts() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {mockPaymentAlerts.map((alert) => (
+        {alerts.length === 0 ? (
+          <p className="text-[12px]" style={{ color: "rgba(29,29,31,0.5)" }}>
+            No upcoming payment alerts.
+          </p>
+        ) : null}
+        {alerts.map((alert) => (
           <div
             key={alert.id}
             className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl"
