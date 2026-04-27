@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import InstructorsDirectoryClient, {
+  type InstructorCourseOption,
   type InstructorDirectoryItem,
   type InstructorTeachingGroup,
 } from "./InstructorsDirectoryClient";
@@ -14,8 +15,11 @@ type RawGroupRow = RecordLike & {
 };
 
 type RawInstructorRow = RecordLike & {
+  courses?: RecordLike | RecordLike[] | null;
   groups?: RawGroupRow[] | null;
 };
+type RawCourseOptionRow = RecordLike;
+
 
 function readString(source: RecordLike, keys: string[], fallback = ""): string {
   for (const key of keys) {
@@ -70,6 +74,8 @@ function readRelations(value: unknown): RecordLike[] {
 
 function mapRawInstructors(rawInstructors: RawInstructorRow[]): InstructorDirectoryItem[] {
   return rawInstructors.map((instructor, instructorIndex) => {
+    const rawCourse = readRelations(instructor.courses)[0] ?? null;
+    const courseName = rawCourse ? readString(rawCourse, ["name"], "") : "";
     const rawGroups = readRelations(instructor.groups);
 
     const groups: InstructorTeachingGroup[] = rawGroups.map((group, groupIndex) => {
@@ -105,7 +111,9 @@ function mapRawInstructors(rawInstructors: RawInstructorRow[]): InstructorDirect
     return {
       id: readString(instructor, ["id"], `instructor-${instructorIndex + 1}`),
       name: readString(instructor, ["full_name", "name"], "Unnamed Instructor"),
-      specialization: readString(instructor, ["subject", "specialization"], "General Studies"),
+      phone: readString(instructor, ["phone"], "") || null,
+      courseId: readString(instructor, ["course_id"], "") || null,
+      specialization: courseName || readString(instructor, ["subject", "specialization"], "General Studies"),
       scheduleSummary,
       payrollRateKztPerHour: readNumber(
         instructor,
@@ -115,6 +123,13 @@ function mapRawInstructors(rawInstructors: RawInstructorRow[]): InstructorDirect
       groups,
     };
   });
+}
+
+function mapRawCourseOptions(rawCourses: RawCourseOptionRow[]): InstructorCourseOption[] {
+  return rawCourses.map((course, index) => ({
+    id: readString(course, ["id"], `course-${index + 1}`),
+    name: readString(course, ["name"], `Course ${index + 1}`),
+  }));
 }
 
 export default async function InstructorsDirectoryPage() {
@@ -128,9 +143,12 @@ export default async function InstructorsDirectoryPage() {
     redirect("/login");
   }
 
-  const { data: rawInstructors, error } = await supabase
+  const [{ data: rawInstructors, error }, { data: rawCourses, error: coursesError }] = await Promise.all([
+    supabase
     .from("instructors")
-    .select("*, groups(id, name, capacity, group_students(count))");
+      .select("*, courses(name), groups(id, name, capacity, group_students(count))"),
+    supabase.from("courses").select("id, name"),
+  ]);
 
   if (error) {
     return (
@@ -159,6 +177,11 @@ export default async function InstructorsDirectoryPage() {
   }
 
   const instructors = mapRawInstructors((rawInstructors ?? []) as RawInstructorRow[]);
+  const courseOptions = mapRawCourseOptions((rawCourses ?? []) as RawCourseOptionRow[]);
 
-  return <InstructorsDirectoryClient instructors={instructors} />;
+  if (coursesError) {
+    console.error("SUPABASE COURSES ERROR (instructors page):", coursesError);
+  }
+
+  return <InstructorsDirectoryClient instructors={instructors} courseOptions={courseOptions} />;
 }

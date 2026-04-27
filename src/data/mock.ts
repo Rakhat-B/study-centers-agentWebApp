@@ -9,7 +9,7 @@ export interface Student {
   courseId?: string | null;
   groupName?: string;
   gender?: string | null;
-  pipelineStatus: "lead" | "evaluating" | "active";
+  pipelineStatus: "lead" | "evaluating" | "active" | "frozen";
   evaluationProgress?: string;
   testingScore?: number | null;
   internalNotes?: string | null;

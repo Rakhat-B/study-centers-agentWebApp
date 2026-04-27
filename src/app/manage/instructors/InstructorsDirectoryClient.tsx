@@ -2,8 +2,18 @@
 
 import AppShell from "@/components/AppShell";
 import { useDashboard } from "@/context/DashboardContext";
-import { Plus } from "lucide-react";
-import { useState } from "react";
+import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { toast, Toaster } from "sonner";
+import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
+import InstructorSlideOver, {
+  type InstructorCourseOption,
+  type InstructorFormData,
+} from "@/components/instructors/InstructorSlideOver";
+import { addInstructor, deleteInstructor, updateInstructor } from "@/actions/mutations";
+
+export type { InstructorCourseOption };
 
 export type InstructorTeachingGroup = {
   id: string;
@@ -16,6 +26,8 @@ export type InstructorTeachingGroup = {
 export type InstructorDirectoryItem = {
   id: string;
   name: string;
+  phone?: string | null;
+  courseId?: string | null;
   specialization: string;
   scheduleSummary: string;
   payrollRateKztPerHour: number;
@@ -24,6 +36,16 @@ export type InstructorDirectoryItem = {
 
 type InstructorsDirectoryClientProps = {
   instructors: InstructorDirectoryItem[];
+  courseOptions: InstructorCourseOption[];
+};
+
+type PanelMode = "add" | "edit";
+
+type MenuState = {
+  instructorId: string;
+  x: number;
+  y: number;
+  openUp: boolean;
 };
 
 function getInitials(name: string) {
@@ -36,12 +58,184 @@ function getInitials(name: string) {
   return `${first}${second}`.toUpperCase();
 }
 
-export default function InstructorsDirectoryClient({ instructors }: InstructorsDirectoryClientProps) {
+export default function InstructorsDirectoryClient({
+  instructors,
+  courseOptions,
+}: InstructorsDirectoryClientProps) {
   const { currentRole } = useDashboard();
-  const [clicked, setClicked] = useState(false);
+  const router = useRouter();
+  const [directoryInstructors, setDirectoryInstructors] = useState<InstructorDirectoryItem[]>(instructors);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<PanelMode>("add");
+  const [panelSessionKey, setPanelSessionKey] = useState(0);
+  const [editingInstructorId, setEditingInstructorId] = useState<string | null>(null);
+  const [deleteInstructorId, setDeleteInstructorId] = useState<string | null>(null);
+  const [isMutationPending, startMutationTransition] = useTransition();
+  const [isDeletePending, startDeleteTransition] = useTransition();
+  const [menuState, setMenuState] = useState<MenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (menuRef.current && event.target instanceof Node && !menuRef.current.contains(event.target)) {
+        setMenuState(null);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuState(null);
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const editingInstructor = useMemo(
+    () => directoryInstructors.find((instructor) => instructor.id === editingInstructorId) ?? null,
+    [directoryInstructors, editingInstructorId],
+  );
+
+  const currentFormData = useMemo<InstructorFormData>(() => {
+    if (!editingInstructor) {
+      return {
+        fullName: "",
+        phone: "",
+        courseId: "",
+      };
+    }
+
+    return {
+      fullName: editingInstructor.name,
+      phone: editingInstructor.phone ?? "",
+      courseId: editingInstructor.courseId ?? "",
+    };
+  }, [editingInstructor]);
+
+  const deleteInstructorName = useMemo(
+    () => directoryInstructors.find((instructor) => instructor.id === deleteInstructorId)?.name ?? "",
+    [directoryInstructors, deleteInstructorId],
+  );
+
+  const openAddPanel = () => {
+    setPanelSessionKey((value) => value + 1);
+    setPanelMode("add");
+    setEditingInstructorId(null);
+    setIsPanelOpen(true);
+  };
+
+  const openEditPanel = (instructorId: string) => {
+    setPanelSessionKey((value) => value + 1);
+    setPanelMode("edit");
+    setEditingInstructorId(instructorId);
+    setIsPanelOpen(true);
+    setMenuState(null);
+  };
+
+  const closePanel = () => {
+    setIsPanelOpen(false);
+    setEditingInstructorId(null);
+  };
+
+  const openMenu = (instructorId: string, index: number, target: HTMLButtonElement) => {
+    const rect = target.getBoundingClientRect();
+    const shouldOpenUp = index >= directoryInstructors.length - 2;
+
+    setMenuState((current) => {
+      if (current?.instructorId === instructorId) return null;
+
+      return {
+        instructorId,
+        x: rect.right,
+        y: shouldOpenUp ? rect.top : rect.bottom,
+        openUp: shouldOpenUp,
+      };
+    });
+  };
+
+  const handleSaveInstructor = (form: InstructorFormData) => {
+    const formData = new FormData();
+    formData.set("full_name", form.fullName);
+    formData.set("phone", form.phone);
+    formData.set("course_id", form.courseId);
+
+    startMutationTransition(async () => {
+      if (panelMode === "edit" && editingInstructorId) {
+        const result = await updateInstructor(editingInstructorId, formData);
+
+        if (!result.success) {
+          toast.error(`Error: ${result.message}`);
+          return;
+        }
+
+        const selectedCourse = courseOptions.find((course) => course.id === form.courseId);
+        setDirectoryInstructors((prev) =>
+          prev.map((instructor) =>
+            instructor.id === editingInstructorId
+              ? {
+                  ...instructor,
+                  name: form.fullName.trim(),
+                  phone: form.phone.trim() || null,
+                  courseId: form.courseId || null,
+                  specialization: selectedCourse?.name ?? "General Studies",
+                }
+              : instructor,
+          ),
+        );
+
+        closePanel();
+        toast.success(result.message || "Instructor updated");
+        return;
+      }
+
+      const result = await addInstructor(formData);
+
+      if (!result.success) {
+        toast.error(`Error: ${result.message}`);
+        return;
+      }
+
+      closePanel();
+      toast.success(result.message || "Instructor added");
+      router.refresh();
+    });
+  };
+
+  const openDeleteDialog = (instructorId: string) => {
+    setDeleteInstructorId(instructorId);
+    setMenuState(null);
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteInstructorId(null);
+  };
+
+  const confirmDeleteInstructor = () => {
+    if (!deleteInstructorId) return;
+    const targetInstructorId = deleteInstructorId;
+
+    startDeleteTransition(async () => {
+      const result = await deleteInstructor(targetInstructorId);
+
+      if (!result.success) {
+        toast.error(`Error: ${result.message}`);
+        return;
+      }
+
+      setDirectoryInstructors((prev) => prev.filter((instructor) => instructor.id !== targetInstructorId));
+      closeDeleteDialog();
+      toast.success(result.message || "Instructor deleted");
+      router.refresh();
+    });
+  };
 
   return (
     <AppShell>
+      <Toaster richColors position="top-right" />
+
       <div className="flex items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: "var(--foreground)" }}>
@@ -53,42 +247,33 @@ export default function InstructorsDirectoryClient({ instructors }: InstructorsD
         </div>
 
         <button
-          onClick={() => {
-            setClicked(true);
-            setTimeout(() => setClicked(false), 1200);
-          }}
+          onClick={openAddPanel}
           className="flex items-center gap-2.5 px-6 py-3 rounded-full font-semibold text-[14px] tracking-tight transition-all duration-200"
           style={{
-            background: clicked
-              ? "linear-gradient(135deg, #005fc4 0%, #1f8ef4 100%)"
-              : "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
+            background: "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
             color: "white",
-            boxShadow: clicked ? "0 4px 12px rgba(0, 109, 224, 0.3)" : "0 8px 24px rgba(0, 109, 224, 0.38)",
-            transform: clicked ? "scale(0.97)" : "scale(1)",
+            boxShadow: "0 8px 24px rgba(0, 109, 224, 0.38)",
+            transform: "scale(1)",
             border: "none",
             cursor: "pointer",
             letterSpacing: "-0.01em",
           }}
           onMouseEnter={(e) => {
-            if (!clicked) {
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 28px rgba(0, 109, 224, 0.48)";
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)";
-            }
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 28px rgba(0, 109, 224, 0.48)";
+            (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)";
           }}
           onMouseLeave={(e) => {
-            if (!clicked) {
-              (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(0, 109, 224, 0.38)";
-              (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-            }
+            (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(0, 109, 224, 0.38)";
+            (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
           }}
         >
           <Plus size={16} strokeWidth={2.2} />
-          + Add Instructor
+           Add Instructor
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {instructors.map((inst) => (
+        {directoryInstructors.map((inst, index) => (
           <div
             key={inst.id}
             className="glass-card p-5 flex flex-col gap-3 transition-all duration-200 hover:bg-white/5 hover:ring-1 hover:ring-white/25"
@@ -166,9 +351,90 @@ export default function InstructorsDirectoryClient({ instructors }: InstructorsD
                 </p>
               </div>
             ) : null}
+
+            <div className="flex justify-end gap-2 mt-1">
+              <button
+                onClick={(event) => openMenu(inst.id, index, event.currentTarget)}
+                className="h-8 w-8 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-white transition-colors"
+                aria-label={`More options for ${inst.name}`}
+              >
+                <MoreHorizontal size={15} className="mx-auto" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      {menuState
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="fixed z-[90] w-44 rounded-xl border border-slate-200 bg-white shadow-lg p-1"
+              style={{
+                left: menuState.x,
+                top: menuState.y,
+                transform: menuState.openUp
+                  ? "translate(-100%, calc(-100% - 8px))"
+                  : "translate(-100%, 8px)",
+              }}
+            >
+              <button
+                onClick={() => openEditPanel(menuState.instructorId)}
+                className="w-full h-8 rounded-lg px-2.5 flex items-center gap-2 text-[12px] text-slate-700 hover:bg-slate-50"
+              >
+                <Pencil size={13} />
+                Edit Instructor
+              </button>
+              <button
+                onClick={() => openDeleteDialog(menuState.instructorId)}
+                className="w-full h-8 rounded-lg px-2.5 flex items-center gap-2 text-[12px] text-red-600 hover:bg-red-50"
+              >
+                <Trash2 size={13} />
+                Delete Instructor
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      <InstructorSlideOver
+        key={panelSessionKey}
+        isOpen={isPanelOpen}
+        mode={panelMode}
+        isPending={isMutationPending}
+        courseOptions={courseOptions}
+        initialData={currentFormData}
+        onClose={closePanel}
+        onSave={handleSaveInstructor}
+      />
+
+      {deleteInstructorId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <button className="absolute inset-0 bg-slate-900/35" onClick={closeDeleteDialog} aria-label="Close delete modal" />
+          <section className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-xl p-5">
+            <h3 className="text-[18px] font-semibold text-slate-900">Delete Instructor</h3>
+            <p className="text-[12px] text-slate-500 mt-2">
+              Are you sure you want to delete {deleteInstructorName}? This action cannot be undone.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={closeDeleteDialog}
+                className="h-9 px-4 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-[13px] font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteInstructor}
+                disabled={isDeletePending}
+                className="h-9 px-4 rounded-lg bg-red-600 text-white hover:bg-red-700 text-[13px] font-semibold"
+              >
+                {isDeletePending ? "Deleting..." : "Delete Instructor"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

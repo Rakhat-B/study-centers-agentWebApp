@@ -19,6 +19,10 @@ const pipelineStyles: Record<Student["pipelineStatus"], { label: string; classNa
     label: "Lead",
     className: "bg-orange-100 text-orange-800 border-orange-200",
   },
+  frozen: {
+    label: "Frozen",
+    className: "bg-sky-100 text-sky-800 border-sky-200",
+  },
 };
 
 type StudentTableProps = {
@@ -56,6 +60,9 @@ function formatDate(input: string) {
 }
 
 function parseDateOnly(value: string) {
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day, 0, 0, 0, 0);
@@ -204,7 +211,7 @@ export default function StudentTable({
         {sortedStudents.map((student, index) => {
           const badge = pipelineStyles[student.pipelineStatus];
           const freeze = getFreezeState(student.freezeStart, student.freezeEnd);
-          const isFrozen = freeze.state === "active";
+          const isFrozen = freeze.state === "active" || student.pipelineStatus === "frozen";
           const isLastRow = index === sortedStudents.length - 1;
 
           return (
@@ -324,13 +331,20 @@ export default function StudentTable({
               <button
                 onClick={() => {
                   const studentId = menuState.studentId;
+                  const target = students.find((student) => student.id === studentId);
+                  if (target?.pipelineStatus === "frozen") {
+                    setMenuState(null);
+                    return;
+                  }
                   setMenuState(null);
                   onFreeze(studentId);
                 }}
                 className="w-full h-8 rounded-lg px-2.5 flex items-center gap-2 text-[12px] text-slate-700 hover:bg-slate-50"
               >
                 <Snowflake size={13} />
-                Freeze Student
+                {students.find((student) => student.id === menuState.studentId)?.pipelineStatus === "frozen"
+                  ? "Already Frozen"
+                  : "Freeze Student"}
               </button>
               <button
                 onClick={() => {

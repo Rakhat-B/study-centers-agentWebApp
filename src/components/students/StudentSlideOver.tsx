@@ -3,9 +3,9 @@
 import { LoaderCircle, X } from "lucide-react";
 import { useActionState, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { toast } from "sonner";
-import { addStudent } from "@/actions/mutations";
+import { addStudent, updateStudent } from "@/actions/mutations";
 
-export type StudentFormStatus = "lead" | "evaluating" | "active";
+export type StudentFormStatus = "lead" | "evaluating" | "active" | "frozen";
 
 export type GroupSelectOption = {
   id: string;
@@ -37,6 +37,9 @@ type StudentSlideOverProps = {
   courses: CourseSelectOption[];
   groupsByCourse: Record<string, GroupSelectOption[]>;
   initialData: StudentFormData;
+  editingStudentId?: string | null;
+  isFreezePending?: boolean;
+  onFreezeStudent?: () => void;
   onClose: () => void;
   onSave: (data: StudentFormData) => void;
 };
@@ -80,6 +83,9 @@ export default function StudentSlideOver({
   courses,
   groupsByCourse,
   initialData,
+  editingStudentId = null,
+  isFreezePending = false,
+  onFreezeStudent,
   onClose,
   onSave,
 }: StudentSlideOverProps) {
@@ -163,6 +169,36 @@ export default function StudentSlideOver({
 
     startTransition(() => {
       submitAddStudent(formData);
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!editingStudentId) {
+      toast.error("Student not found for editing.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("first_name", form.firstName);
+    formData.set("last_name", form.lastName);
+    formData.set("phone", form.phone);
+    formData.set("gender", form.gender);
+    formData.set("testingScore", form.testingScore.toString());
+    formData.set("internalNotes", form.notes);
+    formData.set("status", form.status);
+    formData.set("group_id", form.groupId);
+    formData.set("course_id", form.courseId || "");
+
+    startTransition(async () => {
+      const result = await updateStudent(editingStudentId, formData);
+
+      if (!result.success) {
+        toast.error(`Error: ${result.message}`);
+        return;
+      }
+
+      onSave(form);
+      toast.success(result.message || "Student updated");
     });
   };
 
@@ -390,6 +426,16 @@ export default function StudentSlideOver({
         </div>
 
         <footer className="h-16 px-5 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky bottom-0 flex items-center justify-end gap-2">
+          {mode === "edit" ? (
+            <button
+              type="button"
+              onClick={onFreezeStudent}
+              disabled={isFreezePending}
+              className="h-9 px-4 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 disabled:opacity-60 disabled:hover:bg-transparent text-[13px] font-medium mr-auto"
+            >
+              {isFreezePending ? "Freezing..." : "Freeze Student"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -415,7 +461,7 @@ export default function StudentSlideOver({
           ) : (
             <button
               type="button"
-              onClick={() => onSave(form)}
+              onClick={mode === "edit" ? handleEditSave : () => onSave(form)}
               disabled={!canSave}
               className="h-9 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 text-[13px] font-semibold"
             >

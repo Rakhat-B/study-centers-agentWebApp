@@ -21,6 +21,8 @@ type RawStudentRow = RecordLike & {
   gender?: string | null;
   testing_score?: number | string | null;
   internal_notes?: string | null;
+  freeze_start?: string | null;
+  freeze_end?: string | null;
   interested_course_id?: string | null;
   group_students?: RawGroupStudentRow[] | null;
 };
@@ -112,6 +114,7 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
   const studentsByStatus: StudentsByStatus = {
     active: [],
     evaluating: [],
+    frozen: [],
     leads: [],
   };
 
@@ -133,6 +136,8 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
     const testingScore = Number.isFinite(parsedTestingScore) ? parsedTestingScore : null;
     const internalNotes = readString(student, ["internal_notes"], "") || "";
     const courseId = readString(student, ["interested_course_id"], "") || "";
+    const freezeStart = readString(student, ["freeze_start"], "") || undefined;
+    const freezeEnd = readString(student, ["freeze_end"], "") || undefined;
 
     const { groupName, courseName } = extractPrimaryGroup(student);
     const course = courseName || readString(student, ["course", "interested_course"], groupName ?? "Unassigned");
@@ -153,7 +158,7 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
       return;
     }
 
-    if (status === "active" || status === "evaluating") {
+    if (status === "active" || status === "evaluating" || status === "frozen") {
       const directoryStudent: DirectoryStudent = {
         id,
         name: fullName,
@@ -166,6 +171,8 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
         testingScore: testingScore || null,
         registeredAt,
         internalNotes: internalNotes || "",
+        freezeStart,
+        freezeEnd,
       };
 
       studentsByStatus[status].push(directoryStudent);
