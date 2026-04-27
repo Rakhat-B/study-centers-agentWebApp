@@ -173,7 +173,6 @@ export async function addStudent(
     const { error: groupLinkError } = await supabase.from("group_students").insert({
       student_id: insertedStudent.id,
       group_id: groupId,
-      study_center_id: studyCenterId,
     });
 
     if (groupLinkError) {
