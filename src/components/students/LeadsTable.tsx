@@ -8,7 +8,7 @@ export type WhatsAppLead = {
   name: string;
   phone: string;
   course: string;
-  gender?: "male" | "female" | "other";
+  gender?: string | null;
   lastMessagedAt: string;
 };
 

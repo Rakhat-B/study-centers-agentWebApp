@@ -8,11 +8,6 @@ export type MutationActionState = {
   message: string;
 };
 
-function readString(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 async function resolveStudyCenterId(supabase: SupabaseClient, userId: string) {
@@ -58,14 +53,28 @@ export async function addStudent(
   _prevState: MutationActionState,
   formData: FormData,
 ): Promise<MutationActionState> {
-  const firstName = readString(formData, "first_name");
-  const lastName = readString(formData, "last_name");
-  const phone = readString(formData, "phone");
-  const gender = readString(formData, "gender");
-  const testingScoreInput = readString(formData, "testingScore");
-  const internalNotes = readString(formData, "internalNotes");
-  const statusInput = readString(formData, "status");
-  const groupId = readString(formData, "group_id");
+  console.log("🚨 SERVER RECEIVED:", Object.fromEntries(formData.entries()));
+
+  const firstNameEntry = formData.get("first_name");
+  const lastNameEntry = formData.get("last_name");
+  const phoneEntry = formData.get("phone");
+  const genderEntry = formData.get("gender");
+  const testingScoreEntry = formData.get("testingScore");
+  const internalNotesEntry = formData.get("internalNotes");
+  const statusEntry = formData.get("status");
+  const groupIdEntry = formData.get("group_id");
+  const courseId = formData.get("course_id") as string;
+
+  const firstName = typeof firstNameEntry === "string" ? firstNameEntry.trim() : "";
+  const lastName = typeof lastNameEntry === "string" ? lastNameEntry.trim() : "";
+  const phone = typeof phoneEntry === "string" ? phoneEntry.trim() : "";
+  const gender = typeof genderEntry === "string" ? genderEntry.trim() : "";
+  const testingScoreInput =
+    typeof testingScoreEntry === "string" ? testingScoreEntry.trim() : "";
+  const internalNotes =
+    typeof internalNotesEntry === "string" ? internalNotesEntry.trim() : "";
+  const statusInput = typeof statusEntry === "string" ? statusEntry.trim() : "";
+  const groupId = typeof groupIdEntry === "string" ? groupIdEntry.trim() : "";
 
   if (!firstName || !lastName || !phone) {
     return {
@@ -127,22 +136,40 @@ export async function addStudent(
       last_name: lastName,
       phone,
       gender: gender || null,
-      testing_score: testingScore,
+      testing_score: testingScore || null,
       internal_notes: internalNotes || null,
-      status: studentStatus,
+      status: statusInput || "evaluating",
+      interested_course_id: courseId || null,
       study_center_id: studyCenterId,
     })
     .select("id")
     .single();
 
-  if (insertStudentError || !insertedStudent?.id) {
+  if (insertStudentError) {
+    if (
+      insertStudentError.message.includes("unique constraint") ||
+      insertStudentError.code === "23505"
+    ) {
+      return {
+        success: false,
+        message: "A student with this phone number already exists in your center.",
+      };
+    }
+
     return {
       success: false,
-      message: insertStudentError?.message ?? "Failed to create student.",
+      message: insertStudentError.message,
     };
   }
 
-  if (groupId) {
+  if (!insertedStudent?.id) {
+    return {
+      success: false,
+      message: "Failed to create student.",
+    };
+  }
+
+  if (groupId && groupId.trim() !== "") {
     const { error: groupLinkError } = await supabase.from("group_students").insert({
       student_id: insertedStudent.id,
       group_id: groupId,

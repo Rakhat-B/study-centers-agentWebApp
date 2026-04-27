@@ -12,7 +12,7 @@ import { Toaster } from "sonner";
 type TabId = "directory" | "evaluating" | "whatsappLeads";
 type PanelMode = "add" | "edit" | "review";
 export type DirectoryStudent = Student & { internalNotes: string };
-export type AvailableClassOption = { name: string; groups: { id: string; name: string }[] };
+export type AvailableClassOption = { id: string; name: string; groups: { id: string; name: string }[] };
 export type StudentsByStatus = {
   active: DirectoryStudent[];
   evaluating: DirectoryStudent[];
@@ -51,16 +51,25 @@ function normalizeFreezeWindow(student: Student) {
   return { freezeStart: student.freezeStart, freezeEnd: student.freezeEnd };
 }
 
+function normalizeGender(value?: string | null): StudentFormData["gender"] {
+  if (value === "male" || value === "female" || value === "other") {
+    return value;
+  }
+
+  return "";
+}
+
 function toFormData(input: {
   name: string;
   phone: string;
   course: string;
+  courseId?: string;
   groupId?: string;
   groupName?: string;
-  gender?: "male" | "female" | "other";
+  gender?: string | null;
   status?: Student["pipelineStatus"];
-  testingScore?: number;
-  notes?: string;
+  testingScore?: number | null;
+  notes?: string | null;
 }): StudentFormData {
   const [firstName, ...rest] = input.name.trim().split(" ");
   const lastName = rest.join(" ");
@@ -70,16 +79,17 @@ function toFormData(input: {
     lastName,
     phone: input.phone,
     course: input.course,
+    courseId: input.courseId ?? "",
     groupId: input.groupId ?? "",
     groupName: input.groupName ?? "",
-    gender: input.gender ?? "other",
+    gender: normalizeGender(input.gender),
     status:
       input.status === "active"
         ? "active"
         : input.status === "lead"
           ? "lead"
           : "evaluating",
-    testingScore: input.testingScore !== undefined ? String(input.testingScore) : "",
+    testingScore: input.testingScore != null ? String(input.testingScore) : "",
     notes: input.notes ?? "",
   };
 }
@@ -124,12 +134,12 @@ export default function StudentsDirectoryClient({
   const [freezeEndDate, setFreezeEndDate] = useState("");
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
 
-  const courses = useMemo(() => availableClasses.map((c) => c.name), [availableClasses]);
+  const courses = useMemo(() => availableClasses, [availableClasses]);
 
   const groupsByCourse = useMemo(
     () =>
       Object.fromEntries(
-        availableClasses.map((item) => [item.name, item.groups]),
+        availableClasses.map((item) => [item.id, item.groups]),
       ) as Record<string, AvailableClassOption["groups"]>,
     [availableClasses],
   );
@@ -187,14 +197,18 @@ export default function StudentsDirectoryClient({
 
   const currentFormData = useMemo<StudentFormData>(() => {
     if (panelMode === "edit" && editingStudent) {
-      const matchingGroup = (groupsByCourse[editingStudent.course] ?? []).find(
+      const matchingCourse = editingStudent.courseId
+        ? availableClasses.find((courseOption) => courseOption.id === editingStudent.courseId)
+        : availableClasses.find((courseOption) => courseOption.name === editingStudent.course);
+      const matchingGroup = (matchingCourse ? groupsByCourse[matchingCourse.id] ?? [] : []).find(
         (group) => group.name === editingStudent.groupName,
       );
 
       return toFormData({
         name: editingStudent.name,
         phone: editingStudent.phone,
-        course: editingStudent.course,
+        course: matchingCourse?.name ?? editingStudent.course,
+        courseId: editingStudent.courseId ?? matchingCourse?.id,
         groupId: matchingGroup?.id,
         groupName: editingStudent.groupName,
         gender: editingStudent.gender,
@@ -205,10 +219,13 @@ export default function StudentsDirectoryClient({
     }
 
     if (panelMode === "review" && reviewingLead) {
+      const matchingCourse = availableClasses.find((courseOption) => courseOption.name === reviewingLead.course);
+
       return toFormData({
         name: reviewingLead.name,
         phone: reviewingLead.phone,
-        course: reviewingLead.course,
+        course: matchingCourse?.name ?? reviewingLead.course,
+        courseId: matchingCourse?.id,
         groupName: "",
         gender: reviewingLead.gender,
         testingScore: undefined,
@@ -220,15 +237,16 @@ export default function StudentsDirectoryClient({
       firstName: "",
       lastName: "",
       phone: "",
-      course: courses[0] ?? "",
+      course: courses[0]?.name ?? "",
+      courseId: courses[0]?.id ?? "",
       groupId: "",
       groupName: "",
-      gender: "other",
+      gender: "",
       status: "evaluating",
       testingScore: "",
       notes: "",
     };
-  }, [panelMode, editingStudent, reviewingLead, courses, groupsByCourse]);
+  }, [panelMode, editingStudent, reviewingLead, courses, groupsByCourse, availableClasses]);
 
   const openAddPanel = () => {
     setPanelSessionKey((value) => value + 1);
@@ -271,8 +289,9 @@ export default function StudentsDirectoryClient({
       name,
       phone: data.phone.trim(),
       course: data.course,
+      courseId: data.courseId || null,
       groupName: data.groupName || undefined,
-      gender: data.gender,
+      gender: data.gender || null,
       pipelineStatus: nextPipelineStatus,
       testingScore,
       evaluationProgress:

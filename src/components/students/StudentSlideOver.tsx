@@ -12,14 +12,20 @@ export type GroupSelectOption = {
   name: string;
 };
 
+export type CourseSelectOption = {
+  id: string;
+  name: string;
+};
+
 export type StudentFormData = {
   firstName: string;
   lastName: string;
   phone: string;
   course: string;
+  courseId: string;
   groupId: string;
   groupName: string;
-  gender: "male" | "female" | "other";
+  gender: "" | "male" | "female" | "other";
   status: StudentFormStatus;
   testingScore: string;
   notes: string;
@@ -28,7 +34,7 @@ export type StudentFormData = {
 type StudentSlideOverProps = {
   isOpen: boolean;
   mode: "add" | "edit" | "review";
-  courses: string[];
+  courses: CourseSelectOption[];
   groupsByCourse: Record<string, GroupSelectOption[]>;
   initialData: StudentFormData;
   onClose: () => void;
@@ -40,6 +46,34 @@ const INITIAL_MUTATION_ACTION_STATE = {
   message: "",
 };
 
+function buildInitialFormState(
+  initialData: StudentFormData,
+  courses: CourseSelectOption[],
+  groupsByCourse: Record<string, GroupSelectOption[]>,
+): StudentFormData {
+  const selectedCourse = initialData.courseId
+    ? courses.find((course) => course.id === initialData.courseId)
+    : courses.find((course) => course.name === initialData.course);
+
+  const resolvedCourseId = selectedCourse?.id ?? initialData.courseId ?? "";
+  const resolvedCourseName = selectedCourse?.name ?? initialData.course ?? "";
+  const initialGroups = resolvedCourseId ? groupsByCourse[resolvedCourseId] ?? [] : [];
+  const initialMatchedGroup = initialData.groupId
+    ? initialGroups.find((group) => group.id === initialData.groupId)
+    : initialGroups.find((group) => group.name === initialData.groupName);
+
+  return {
+    ...initialData,
+    course: resolvedCourseName,
+    courseId: initialData.courseId || resolvedCourseId,
+    groupId: initialMatchedGroup?.id ?? initialData.groupId,
+    groupName: initialMatchedGroup?.name ?? initialData.groupName,
+    gender: initialData.gender || "",
+    testingScore: initialData.testingScore ? initialData.testingScore.toString() : "",
+    notes: initialData.notes || "",
+  };
+}
+
 export default function StudentSlideOver({
   isOpen,
   mode,
@@ -49,25 +83,34 @@ export default function StudentSlideOver({
   onClose,
   onSave,
 }: StudentSlideOverProps) {
-  const initialGroups = initialData.course ? groupsByCourse[initialData.course] ?? [] : [];
-  const initialMatchedGroup = initialData.groupId
-    ? initialGroups.find((group) => group.id === initialData.groupId)
-    : initialGroups.find((group) => group.name === initialData.groupName);
-
   const [actionState, submitAddStudent, isActionPending] = useActionState(
     addStudent,
     INITIAL_MUTATION_ACTION_STATE,
   );
   const [isTransitionPending, startTransition] = useTransition();
-  const [form, setForm] = useState<StudentFormData>({
-    ...initialData,
-    groupId: initialMatchedGroup?.id ?? "",
-    groupName: initialMatchedGroup?.name ?? initialData.groupName,
-  });
+  const [form, setForm] = useState<StudentFormData>(() =>
+    buildInitialFormState(initialData, courses, groupsByCourse),
+  );
   const isAddMode = mode === "add";
   const isPending = isActionPending || isTransitionPending;
   const disableFormInputs = isAddMode && isPending;
-  const availableGroups = form.course ? groupsByCourse[form.course] ?? [] : [];
+  const availableGroups = form.courseId ? groupsByCourse[form.courseId] ?? [] : [];
+
+  useEffect(() => {
+    setForm(buildInitialFormState(initialData, courses, groupsByCourse));
+  }, [initialData, courses, groupsByCourse]);
+
+  const handleCourseChange = (nextCourseId: string) => {
+    const selectedCourse = courses.find((course) => course.id === nextCourseId);
+
+    setForm((prev) => ({
+      ...prev,
+      courseId: nextCourseId,
+      course: selectedCourse?.name ?? "",
+      groupId: "",
+      groupName: "",
+    }));
+  };
 
   const handleGroupChange = (nextGroupId: string) => {
     const selectedGroup = availableGroups.find((group) => group.id === nextGroupId);
@@ -111,11 +154,12 @@ export default function StudentSlideOver({
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
-    formData.set("group_id", form.groupId);
     formData.set("gender", form.gender);
-    formData.set("status", form.status);
-    formData.set("testingScore", form.testingScore);
+    formData.set("testingScore", form.testingScore.toString());
     formData.set("internalNotes", form.notes);
+    formData.set("status", form.status);
+    formData.set("group_id", form.groupId);
+    formData.set("course_id", form.courseId || "");
 
     startTransition(() => {
       submitAddStudent(formData);
@@ -171,7 +215,7 @@ export default function StudentSlideOver({
         aria-label="Close panel"
       />
 
-      <section className="relative h-full w-full sm:max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col">
+      <section className="relative h-full w-full sm:max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col overflow-hidden">
         <header className="h-16 px-5 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-[18px] font-semibold text-slate-900">{panelTitle}</h2>
           <button
@@ -184,8 +228,8 @@ export default function StudentSlideOver({
           </button>
         </header>
 
-        <form onSubmit={isAddMode ? handleSubmit : undefined} className="flex flex-1 flex-col">
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <form onSubmit={isAddMode ? handleSubmit : undefined} className="flex flex-1 min-h-0 flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 pb-24">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="space-y-1.5">
               <span className="text-[12px] font-medium text-slate-600">First Name</span>
@@ -224,23 +268,16 @@ export default function StudentSlideOver({
           <label className="space-y-1.5 block">
             <span className="text-[12px] font-medium text-slate-600">Course</span>
             <select
-              name="course"
-              value={form.course}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  course: e.target.value,
-                  groupId: "",
-                  groupName: "",
-                }))
-              }
+              name="course_id"
+              value={form.courseId}
+              onChange={(e) => handleCourseChange(e.target.value)}
               disabled={disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 bg-white"
             >
               <option value="">Select course</option>
               {courses.map((course) => (
-                <option key={course} value={course}>
-                  {course}
+                <option key={course.id} value={course.id}>
+                  {course.name}
                 </option>
               ))}
             </select>
@@ -252,7 +289,7 @@ export default function StudentSlideOver({
               name="group_id"
               value={form.groupId}
               onChange={(e) => handleGroupChange(e.target.value)}
-              disabled={!form.course || disableFormInputs}
+              disabled={!form.courseId || disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 bg-white disabled:bg-slate-100 disabled:text-slate-400"
             >
               <option value="">Unassigned</option>
@@ -273,6 +310,7 @@ export default function StudentSlideOver({
               disabled={disableFormInputs}
               className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[13px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 bg-white"
             >
+              <option value="">Select gender</option>
               <option value="male">Male</option>
               <option value="female">Female</option>
               <option value="other">Other</option>
@@ -351,7 +389,7 @@ export default function StudentSlideOver({
 
         </div>
 
-        <footer className="h-16 px-5 border-t border-slate-200 flex items-center justify-end gap-2">
+        <footer className="h-16 px-5 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky bottom-0 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onClose}

@@ -6,11 +6,13 @@ export interface Student {
   name: string;
   phone: string;
   course: string;
+  courseId?: string | null;
   groupName?: string;
-  gender?: "male" | "female" | "other";
+  gender?: string | null;
   pipelineStatus: "lead" | "evaluating" | "active";
   evaluationProgress?: string;
-  testingScore?: number;
+  testingScore?: number | null;
+  internalNotes?: string | null;
   freezeStart?: string;
   freezeEnd?: string;
   registeredAt: string;

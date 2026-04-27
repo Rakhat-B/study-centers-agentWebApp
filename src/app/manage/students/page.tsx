@@ -18,6 +18,10 @@ type RawGroupStudentRow = RecordLike & {
 };
 
 type RawStudentRow = RecordLike & {
+  gender?: string | null;
+  testing_score?: number | string | null;
+  internal_notes?: string | null;
+  interested_course_id?: string | null;
   group_students?: RawGroupStudentRow[] | null;
 };
 
@@ -63,6 +67,19 @@ function readCourseNameFromGroup(group: RecordLike): string {
   return readString(rawCourse, ["name"], "");
 }
 
+function readCourseMetaFromGroup(group: RecordLike): { id: string; name: string } {
+  const rawCourse = readRelations((group as RawGroupRow).courses)[0] ?? null;
+
+  if (!rawCourse) {
+    return { id: "", name: "" };
+  }
+
+  return {
+    id: readString(rawCourse, ["id"], ""),
+    name: readString(rawCourse, ["name"], ""),
+  };
+}
+
 function extractPrimaryGroup(student: RawStudentRow): {
   groupId?: string;
   groupName?: string;
@@ -105,6 +122,17 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
     const fullName = `${firstName} ${lastName}`.trim() || readString(student, ["full_name", "name"], "Unnamed Student");
     const phone = readString(student, ["phone"], "No phone");
     const registeredAt = readString(student, ["created_at", "registered_at"], new Date().toISOString());
+    const gender = readString(student, ["gender"], "") || "";
+    const testingScoreRaw = student.testing_score;
+    const parsedTestingScore =
+      typeof testingScoreRaw === "number"
+        ? testingScoreRaw
+        : typeof testingScoreRaw === "string" && testingScoreRaw.trim()
+          ? Number(testingScoreRaw)
+          : null;
+    const testingScore = Number.isFinite(parsedTestingScore) ? parsedTestingScore : null;
+    const internalNotes = readString(student, ["internal_notes"], "") || "";
+    const courseId = readString(student, ["interested_course_id"], "") || "";
 
     const { groupName, courseName } = extractPrimaryGroup(student);
     const course = courseName || readString(student, ["course", "interested_course"], groupName ?? "Unassigned");
@@ -117,6 +145,7 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
         name: fullName,
         phone,
         course,
+        gender: gender || undefined,
         lastMessagedAt: registeredAt,
       };
 
@@ -130,10 +159,13 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
         name: fullName,
         phone,
         course,
+        courseId: courseId || null,
         groupName,
+        gender: gender || "",
         pipelineStatus: status,
+        testingScore: testingScore || null,
         registeredAt,
-        internalNotes: "",
+        internalNotes: internalNotes || "",
       };
 
       studentsByStatus[status].push(directoryStudent);
@@ -145,31 +177,39 @@ function mapRawStudents(rawStudents: RawStudentRow[]): StudentsByStatus {
 
 function mapRawGroupsToAvailableClasses(rawGroups: RawGroupRow[]): AvailableClassOption[] {
   if (!rawGroups.length) {
-    return [{ name: "Unassigned", groups: [] }];
+    return [];
   }
 
-  const groupsByCourse = new Map<string, AvailableClassOption["groups"]>();
+  const groupsByCourse = new Map<string, AvailableClassOption>();
 
   rawGroups.forEach((group, index) => {
     const id = readString(group, ["id"], `group-${index + 1}`);
     const groupName = readString(group, ["name"], `Group ${index + 1}`);
-    const courseName = readCourseNameFromGroup(group) || "Unassigned";
+    const { id: courseId, name: courseName } = readCourseMetaFromGroup(group);
 
-    if (!groupsByCourse.has(courseName)) {
-      groupsByCourse.set(courseName, []);
+    if (!courseId || !courseName) {
+      return;
     }
 
-    groupsByCourse.get(courseName)?.push({
+    if (!groupsByCourse.has(courseId)) {
+      groupsByCourse.set(courseId, {
+        id: courseId,
+        name: courseName,
+        groups: [],
+      });
+    }
+
+    groupsByCourse.get(courseId)?.groups.push({
       id,
       name: groupName,
     });
   });
 
-  return Array.from(groupsByCourse.entries())
-    .sort(([courseA], [courseB]) => courseA.localeCompare(courseB))
-    .map(([name, groups]) => ({
-      name,
-      groups: [...groups].sort((a, b) => a.name.localeCompare(b.name)),
+  return Array.from(groupsByCourse.values())
+    .sort((courseA, courseB) => courseA.name.localeCompare(courseB.name))
+    .map((course) => ({
+      ...course,
+      groups: [...course.groups].sort((a, b) => a.name.localeCompare(b.name)),
     }));
 }
 
@@ -207,10 +247,10 @@ export default async function StudentsDirectoryPage() {
   const [{ data: rawStudents, error: studentsError }, { data: rawGroups, error: groupsError }] = await Promise.all([
     supabase
       .from("students")
-      .select("*, group_students(groups(id, name, courses(name)))"),
+      .select("*, interested_course_id, group_students(groups(id, name, courses(id, name)))"),
     supabase
       .from("groups")
-      .select("id, name, courses(name)"),
+      .select("id, name, courses(id, name)"),
   ]);
 
   if (studentsError) {
