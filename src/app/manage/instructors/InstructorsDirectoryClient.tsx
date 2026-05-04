@@ -253,22 +253,13 @@ export default function InstructorsDirectoryClient({
             background: "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
             color: "white",
             boxShadow: "0 8px 24px rgba(0, 109, 224, 0.38)",
-            transform: "scale(1)",
             border: "none",
             cursor: "pointer",
             letterSpacing: "-0.01em",
           }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 10px 28px rgba(0, 109, 224, 0.48)";
-            (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.02)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(0, 109, 224, 0.38)";
-            (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
-          }}
         >
           <Plus size={16} strokeWidth={2.2} />
-           Add Instructor
+          Add Instructor
         </button>
       </div>
 

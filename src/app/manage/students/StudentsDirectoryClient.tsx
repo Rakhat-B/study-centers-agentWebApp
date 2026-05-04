@@ -481,9 +481,17 @@ export default function StudentsDirectoryClient({
         <div>
           <button
             onClick={openAddPanel}
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors text-[13px] font-semibold shadow-sm"
+            className="flex items-center gap-2.5 px-6 py-3 rounded-full font-semibold text-[14px] tracking-tight transition-all duration-200"
+            style={{
+              background: "linear-gradient(135deg, #006de0 0%, #2f9eff 100%)",
+              color: "white",
+              boxShadow: "0 8px 24px rgba(0, 109, 224, 0.38)",
+              border: "none",
+              cursor: "pointer",
+              letterSpacing: "-0.01em",
+            }}
           >
-            <Plus size={16} />
+            <Plus size={16} strokeWidth={2.2} />
             Add Student
           </button>
         </div>
